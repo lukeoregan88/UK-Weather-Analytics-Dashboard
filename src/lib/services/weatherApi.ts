@@ -1,4 +1,10 @@
-import type { Location, WeatherApiResponse, PostcodeApiResponse, RainfallData } from '../types.js';
+import type {
+	Location,
+	WeatherApiResponse,
+	PostcodeApiResponse,
+	RainfallData,
+	TemperatureData
+} from '../types.js';
 import { format } from 'date-fns';
 import { cacheService } from './cacheService.js';
 
@@ -35,7 +41,7 @@ export async function getLocationFromPostcode(postcode: string): Promise<Locatio
 }
 
 /**
- * Get historical rainfall data using Open-Meteo API (free, no API key required)
+ * Get historical rainfall and temperature data using Open-Meteo API
  */
 export async function getHistoricalRainfall(
 	latitude: number,
@@ -51,7 +57,10 @@ export async function getHistoricalRainfall(
 	url.searchParams.set('longitude', longitude.toString());
 	url.searchParams.set('start_date', start);
 	url.searchParams.set('end_date', end);
-	url.searchParams.set('daily', 'precipitation_sum');
+	url.searchParams.set(
+		'daily',
+		'precipitation_sum,temperature_2m_mean,temperature_2m_min,temperature_2m_max'
+	);
 	url.searchParams.set('timezone', 'Europe/London');
 
 	try {
@@ -73,7 +82,9 @@ export async function getHistoricalRainfall(
 		return data.daily.time.map((date, index) => ({
 			date,
 			rainfall: data.daily.precipitation_sum[index] || 0,
-			temperature: undefined,
+			temperature: data.daily.temperature_2m_mean?.[index],
+			temperatureMin: data.daily.temperature_2m_min?.[index],
+			temperatureMax: data.daily.temperature_2m_max?.[index],
 			humidity: undefined
 		}));
 	} catch (error) {
@@ -96,7 +107,7 @@ export async function getCurrentWeather(latitude: number, longitude: number) {
 	url.searchParams.set('latitude', latitude.toString());
 	url.searchParams.set('longitude', longitude.toString());
 	url.searchParams.set('current', 'temperature_2m,relative_humidity_2m,precipitation');
-	url.searchParams.set('daily', 'precipitation_sum');
+	url.searchParams.set('daily', 'precipitation_sum,temperature_2m_min,temperature_2m_max');
 	url.searchParams.set('timezone', 'Europe/London');
 	url.searchParams.set('forecast_days', '1');
 
@@ -166,4 +177,43 @@ export async function getCurrentYearRainfall(
 	cacheService.set(latitude, longitude, 'current_year', data, { ttl: 6 * 60 * 60 * 1000 });
 
 	return data;
+}
+
+/**
+ * Get temperature data for the last 10 years
+ */
+export async function getTenYearTemperatureData(
+	latitude: number,
+	longitude: number
+): Promise<TemperatureData[]> {
+	// Check cache first
+	const cached = cacheService.get<TemperatureData[]>(latitude, longitude, 'temperature_historical');
+	if (cached) {
+		return cached;
+	}
+
+	const currentYear = new Date().getFullYear();
+	const startDate = new Date(currentYear - 10, 0, 1);
+	const endDate = new Date();
+
+	const rainfallData = await getHistoricalRainfall(latitude, longitude, startDate, endDate);
+
+	const temperatureData: TemperatureData[] = rainfallData
+		.filter(
+			(d) =>
+				d.temperature !== undefined &&
+				d.temperatureMin !== undefined &&
+				d.temperatureMax !== undefined
+		)
+		.map((d) => ({
+			date: d.date,
+			temperature: d.temperature!,
+			temperatureMin: d.temperatureMin!,
+			temperatureMax: d.temperatureMax!
+		}));
+
+	// Cache the result
+	cacheService.set(latitude, longitude, 'temperature_historical', temperatureData);
+
+	return temperatureData;
 }

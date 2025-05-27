@@ -87,7 +87,7 @@ class CacheService {
 	 */
 	clearLocation(lat: number, lng: number): void {
 		try {
-			const types = ['historical', 'current_year', 'current_weather'];
+			const types = ['historical', 'current_year', 'current_weather', 'temperature_historical'];
 			types.forEach((type) => {
 				const key = this.generateKey(lat, lng, type);
 				localStorage.removeItem(key);
