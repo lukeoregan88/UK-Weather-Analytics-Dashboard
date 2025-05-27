@@ -5,12 +5,14 @@ A comprehensive rainfall analysis tool built with SvelteKit and TypeScript that 
 ## Features
 
 - **Postcode Lookup**: Enter any UK postcode to get location coordinates
+- **Interactive Map**: Visual location display using Leaflet maps
 - **Historical Data**: 10 years of historical rainfall data
 - **Current Weather**: Real-time weather conditions including temperature, humidity, and today's rainfall
-- **Interactive Charts**: Visual representation of rainfall patterns using Chart.js
+- **Interactive Charts**: Visual representation of rainfall and temperature patterns using Chart.js
 - **Yearly Comparisons**: Compare current year rainfall with historical averages
 - **Drought Analysis**: Identify and analyse drought periods (7+ consecutive days with <1mm rainfall)
 - **Statistical Analysis**: Rainfall percentiles and key statistics
+- **Data Caching**: Intelligent caching system for improved performance
 
 ## Data Sources
 
@@ -20,10 +22,12 @@ A comprehensive rainfall analysis tool built with SvelteKit and TypeScript that 
 
 ## Technology Stack
 
-- **Frontend**: SvelteKit with TypeScript
-- **Styling**: Tailwind CSS
+- **Frontend**: SvelteKit 2.x with TypeScript 5.x
+- **Styling**: Tailwind CSS 4.x
 - **Charts**: Chart.js with date-fns adapter
+- **Maps**: Leaflet with svelte-leafletjs
 - **APIs**: RESTful APIs (no authentication required)
+- **Testing**: Playwright for E2E testing
 
 ## Getting Started
 
@@ -60,9 +64,10 @@ npm run dev
 1. Enter a UK postcode (e.g., "SW1A 1AA", "M1 1AA", "EH1 1YZ")
 2. Click "Analyse" to fetch weather data
 3. Explore the dashboard sections:
+   - **Location Map**: Interactive map showing the selected location
    - **Current Conditions**: Today's weather
    - **Key Statistics**: Summary metrics
-   - **Charts**: Visual rainfall patterns
+   - **Charts**: Visual rainfall and temperature patterns
    - **10-Year Comparison**: Historical analysis table
    - **Drought Periods**: Notable dry spells
 
@@ -72,16 +77,23 @@ npm run dev
 src/
 ├── lib/
 │   ├── components/
-│   │   ├── RainfallChart.svelte      # Chart component
+│   │   ├── RainfallChart.svelte      # Rainfall chart component
+│   │   ├── TemperatureChart.svelte   # Temperature chart component
+│   │   ├── LocationMap.svelte        # Interactive map component
 │   │   └── RainfallDashboard.svelte  # Main dashboard
 │   ├── services/
-│   │   └── weatherApi.ts             # API service layer
+│   │   ├── weatherApi.ts             # API service layer
+│   │   └── cacheService.ts           # Data caching service
 │   ├── utils/
 │   │   └── dataProcessing.ts         # Data analysis utilities
-│   └── types.ts                      # TypeScript interfaces
+│   ├── types.ts                      # TypeScript interfaces
+│   └── index.ts                      # Library exports
 ├── routes/
-│   └── +page.svelte                  # Main page
-└── app.html                          # HTML template
+│   ├── +page.svelte                  # Main page
+│   └── +layout.svelte                # Layout component
+├── app.html                          # HTML template
+├── app.css                           # Global styles
+└── app.d.ts                          # TypeScript declarations
 ```
 
 ## API Endpoints Used
@@ -112,6 +124,18 @@ src/
 
 ## Key Features Explained
 
+### Interactive Mapping
+
+- Uses Leaflet for displaying location markers
+- Provides visual context for the selected postcode
+- Responsive map interface with zoom controls
+
+### Data Caching
+
+- Intelligent caching system to reduce API calls
+- Improves performance and user experience
+- Respects API rate limits
+
 ### Drought Analysis
 
 - Identifies periods of 7+ consecutive days with <1mm rainfall
@@ -138,15 +162,37 @@ src/
 - `npm run build` - Build for production
 - `npm run preview` - Preview production build
 - `npm run check` - Run TypeScript checks
-- `npm run lint` - Run ESLint
+- `npm run check:watch` - Run TypeScript checks in watch mode
+- `npm run lint` - Run ESLint and Prettier checks
 - `npm run format` - Format code with Prettier
+- `npm run test` - Run E2E tests
+- `npm run test:e2e` - Run Playwright E2E tests
 
 ### Adding New Features
 
-1. **New Chart Types**: Extend `RainfallChart.svelte` with additional Chart.js configurations
+1. **New Chart Types**: Extend chart components in `src/lib/components/`
 2. **Additional APIs**: Add new services in `src/lib/services/`
 3. **Data Processing**: Extend utilities in `src/lib/utils/dataProcessing.ts`
 4. **UI Components**: Create new components in `src/lib/components/`
+5. **Caching**: Extend the cache service for new data types
+
+### Dependencies
+
+#### Production Dependencies
+
+- `chart.js` - Charting library
+- `chartjs-adapter-date-fns` - Date adapter for Chart.js
+- `date-fns` - Date utility library
+- `leaflet` - Interactive maps
+- `svelte-leafletjs` - Svelte wrapper for Leaflet
+
+#### Development Dependencies
+
+- `@sveltejs/kit` - SvelteKit framework
+- `tailwindcss` - Utility-first CSS framework
+- `typescript` - TypeScript support
+- `@playwright/test` - E2E testing framework
+- `eslint` & `prettier` - Code linting and formatting
 
 ## Limitations
 
@@ -164,7 +210,9 @@ src/
 - [ ] Add rainfall intensity classifications
 - [ ] Include flood risk indicators
 - [ ] Add mobile-responsive improvements
-- [ ] Implement data caching for better performance
+- [ ] Implement offline mode with service workers
+- [ ] Add more detailed weather parameters
+- [ ] Include weather alerts and warnings
 
 ## Contributing
 
@@ -183,4 +231,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [Open-Meteo](https://open-meteo.com/) for providing free weather data
 - [postcodes.io](https://postcodes.io/) for UK postcode lookup service
 - [Chart.js](https://www.chartjs.org/) for excellent charting capabilities
+- [Leaflet](https://leafletjs.com/) for interactive mapping
 - [Tailwind CSS](https://tailwindcss.com/) for utility-first styling
+- [SvelteKit](https://kit.svelte.dev/) for the excellent framework
