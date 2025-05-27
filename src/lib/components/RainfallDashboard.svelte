@@ -571,7 +571,9 @@
 								<p class="text-xl font-bold text-gray-900">{averageYearlyTotal.toFixed(0)} mm</p>
 							</div>
 							<div class="text-center">
-								<p class="font-medium text-gray-700">Wettest Year</p>
+								<p class="font-medium text-gray-700">
+									Wettest {showMonthlyComparison ? currentMonthName : 'Year'}
+								</p>
 								{#if wettestYear}
 									<p class="text-xl font-bold text-green-700">
 										{wettestYear.totalRainfall.toFixed(0)} mm
@@ -582,7 +584,9 @@
 								{/if}
 							</div>
 							<div class="text-center">
-								<p class="font-medium text-gray-700">Driest Year</p>
+								<p class="font-medium text-gray-700">
+									Driest {showMonthlyComparison ? currentMonthName : 'Year'}
+								</p>
 								{#if driestYear}
 									<p class="text-xl font-bold text-red-700">
 										{driestYear.totalRainfall.toFixed(0)} mm
