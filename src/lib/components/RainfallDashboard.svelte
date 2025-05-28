@@ -31,6 +31,7 @@
 		getRecentTemperature,
 		calculateTemperatureExtremes,
 		calculateEnhancedYearlyComparison,
+		calculateEnhancedMonthlyComparison,
 		calculateAllEnhancedStatistics
 	} from '../utils/dataProcessing.js';
 	import { format } from 'date-fns';
@@ -64,6 +65,8 @@
 	};
 	let showTemperatureView = false;
 	let enhancedStats: EnhancedStatistics | null = null;
+	// Add new state for showing all comparison cards
+	let showAllComparisons = false;
 
 	async function searchLocation() {
 		if (!postcode.trim()) {
@@ -172,7 +175,11 @@
 			? calculateEnhancedYearlyComparison(historicalData, temperatureData)
 			: calculateYearlyComparison(historicalData);
 	$: monthlyComparison =
-		historicalData.length > 0 ? calculateMonthlyComparison(historicalData, currentMonth) : [];
+		historicalData.length > 0 && temperatureData.length > 0
+			? calculateEnhancedMonthlyComparison(historicalData, temperatureData, currentMonth)
+			: historicalData.length > 0
+				? calculateMonthlyComparison(historicalData, currentMonth)
+				: [];
 	$: temperatureComparison =
 		temperatureData.length > 0
 			? showMonthlyComparison
@@ -222,19 +229,19 @@
 			: null;
 </script>
 
-<div class="min-h-screen bg-gray-50 p-4">
+<div class="min-h-screen bg-gray-50">
 	<div class="mx-auto max-w-7xl">
 		<!-- Header -->
-		<div class="mb-6 rounded-lg bg-white p-6 shadow-sm">
-			<h1 class="mb-4 text-3xl font-bold text-gray-900">UK Rainfall Analysis Dashboard</h1>
-			<p class="mb-6 text-gray-600">
+		<div class="mt-4 mb-4 rounded-lg bg-white p-4 shadow-sm">
+			<h1 class="mb-2 text-2xl font-bold text-gray-900">UK Rainfall Analysis Dashboard</h1>
+			<p class="mb-4 text-sm text-gray-600">
 				Analyse historical rainfall patterns and current conditions for any UK location
 			</p>
 
 			<!-- Search -->
-			<div class="flex items-end gap-4">
+			<div class="flex items-end gap-3">
 				<div class="flex-1">
-					<label for="postcode" class="mb-2 block text-sm font-medium text-gray-700">
+					<label for="postcode" class="mb-1 block text-sm font-medium text-gray-700">
 						UK Postcode
 					</label>
 					<input
@@ -243,29 +250,23 @@
 						bind:value={postcode}
 						on:keypress={handleKeyPress}
 						placeholder="e.g. SW1A 1AA"
-						class="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+						class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
 					/>
 				</div>
 				<button
 					on:click={searchLocation}
 					disabled={loading}
-					class="rounded-md bg-blue-600 px-6 py-2 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+					class="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					{loading ? 'Loading...' : 'Analyse'}
 				</button>
 			</div>
 
 			{#if postcode && !location}
-				<div class="mt-4 rounded-md border border-blue-200 bg-blue-50 p-4">
+				<div class="mt-3 rounded-md border border-blue-200 bg-blue-50 p-3">
 					<div class="flex items-center">
-						<svg class="mr-2 h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-							<path
-								fill-rule="evenodd"
-								d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-								clip-rule="evenodd"
-							></path>
-						</svg>
-						<p class="text-blue-800">
+						<i class="fa-solid fa-circle-info mr-2" style="color: #74C0FC;"></i>
+						<p class="text-sm text-blue-800">
 							Found saved postcode: <strong>{postcode}</strong>. Click "Analyse" to load data.
 						</p>
 					</div>
@@ -273,16 +274,16 @@
 			{/if}
 
 			{#if error}
-				<div class="mt-4 rounded-md border border-red-200 bg-red-50 p-4">
-					<p class="text-red-800">{error}</p>
+				<div class="mt-3 rounded-md border border-red-200 bg-red-50 p-3">
+					<p class="text-sm text-red-800">{error}</p>
 				</div>
 			{/if}
 
 			<!-- Cache Management -->
-			<div class="mt-4 flex items-center justify-between">
+			<div class="mt-3 flex items-center justify-between">
 				<button
 					on:click={() => (showCacheInfo = !showCacheInfo)}
-					class="text-sm text-gray-500 hover:text-gray-700 focus:outline-none"
+					class="text-xs text-gray-500 hover:text-gray-700 focus:outline-none"
 				>
 					{showCacheInfo ? 'Hide' : 'Show'} cache info
 				</button>
@@ -291,14 +292,14 @@
 					<div class="flex gap-2">
 						<button
 							on:click={clearAllExpiredCache}
-							class="rounded-md bg-gray-100 px-3 py-1 text-xs text-gray-700 hover:bg-gray-200 focus:outline-none"
+							class="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-700 hover:bg-gray-200 focus:outline-none"
 						>
 							Clear expired
 						</button>
 						{#if location}
 							<button
 								on:click={clearCache}
-								class="rounded-md bg-red-100 px-3 py-1 text-xs text-red-700 hover:bg-red-200 focus:outline-none"
+								class="rounded-md bg-red-100 px-2 py-1 text-xs text-red-700 hover:bg-red-200 focus:outline-none"
 							>
 								Clear location cache
 							</button>
@@ -308,8 +309,8 @@
 			</div>
 
 			{#if showCacheInfo}
-				<div class="mt-2 rounded-md bg-gray-50 p-3">
-					<div class="grid grid-cols-1 gap-2 text-xs text-gray-600 sm:grid-cols-3">
+				<div class="mt-2 rounded-md bg-gray-50 p-2">
+					<div class="grid grid-cols-1 gap-1 text-xs text-gray-600 sm:grid-cols-3">
 						<div>
 							<span class="font-medium">Cached entries:</span>
 							{cacheStats.totalEntries}
@@ -323,7 +324,7 @@
 							{cacheStats.oldestEntry ? cacheStats.oldestEntry.toLocaleDateString() : 'None'}
 						</div>
 					</div>
-					<p class="mt-2 text-xs text-gray-500">
+					<p class="mt-1 text-xs text-gray-500">
 						Data is cached for 12 hours (historical), 6 hours (current year), and 1 hour (current
 						weather) to reduce API calls.
 					</p>
@@ -333,69 +334,65 @@
 
 		{#if location}
 			<!-- Location Info -->
-			<div class="mb-6 rounded-lg bg-white p-6 shadow-sm">
-				<div class="mb-4 flex items-center justify-between">
-					<h2 class="text-xl font-semibold text-gray-900">Location</h2>
+			<div class="mb-4 rounded-lg bg-white p-4 shadow-sm">
+				<div class="mb-3 flex items-center justify-between">
+					<h2 class="text-lg font-semibold text-gray-900">
+						<i class="fa-solid fa-location-dot mr-2"></i> Location
+					</h2>
 					{#if cacheService.has(location.latitude, location.longitude, 'historical')}
 						<span
-							class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800"
+							class="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800"
 						>
-							<svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
-								<path
-									fill-rule="evenodd"
-									d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-									clip-rule="evenodd"
-								></path>
-							</svg>
+							<i class="fa-solid fa-circle-check mr-1"></i>
 							Cached data
 						</span>
 					{/if}
 				</div>
-				<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+				<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
 					<div>
-						<p class="mb-2 text-gray-600">
+						<p class="mb-1 text-sm text-gray-600">
 							{location.name} ({location.postcode})
 						</p>
-						<p class="mb-2 text-gray-600">
+						<p class="mb-1 text-sm text-gray-600">
 							{location.region}
 						</p>
-						<p class="text-sm text-gray-500">
+						<p class="text-xs text-gray-500">
 							Coordinates: {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
 						</p>
 					</div>
 					<div>
-						<LocationMap {location} height="200px" />
+						<LocationMap {location} height="150px" />
 					</div>
 				</div>
 			</div>
 
 			<!-- Current Weather -->
 			{#if currentWeather}
-				<div class="mb-6 rounded-lg bg-white p-6 shadow-sm">
-					<h2 class="mb-4 text-xl font-semibold text-gray-900">Current Conditions</h2>
-					<div class="grid grid-cols-1 gap-4 md:grid-cols-4">
-						<div class="rounded-lg bg-blue-50 p-4">
-							<h3 class="font-medium text-blue-900">Temperature</h3>
-							<p class="text-2xl font-bold text-blue-700">
+				<div class="mb-4 rounded-lg bg-white p-4 shadow-sm">
+					<h2 class="mb-3 text-lg font-semibold text-gray-900">Current Conditions</h2>
+					<div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+						<div class="rounded-lg bg-blue-50 p-3">
+							<h3 class="text-sm font-medium text-blue-900">Temperature</h3>
+							<p class="text-xl font-bold text-blue-700">
 								{currentWeather.current?.temperature_2m?.toFixed(1) || 'N/A'}°C
 							</p>
 						</div>
-						<div class="rounded-lg bg-orange-50 p-4">
-							<h3 class="font-medium text-orange-900">Today's Range</h3>
+						<div class="rounded-lg bg-orange-50 p-3">
+							<h3 class="text-sm font-medium text-orange-900">Today's Range</h3>
 							<p class="text-lg font-bold text-orange-700">
 								{currentWeather.daily?.temperature_2m_min?.[0]?.toFixed(1) || 'N/A'}° -
 								{currentWeather.daily?.temperature_2m_max?.[0]?.toFixed(1) || 'N/A'}°C
 							</p>
 						</div>
-						<div class="rounded-lg bg-green-50 p-4">
-							<h3 class="font-medium text-green-900">Humidity</h3>
-							<p class="text-2xl font-bold text-green-700">
+						<div class="rounded-lg bg-green-50 p-3">
+							<h3 class="text-sm font-medium text-green-900">Humidity</h3>
+							<p class="text-xl font-bold text-green-700">
 								{currentWeather.current?.relative_humidity_2m || 'N/A'}%
 							</p>
 						</div>
-						<div class="rounded-lg bg-purple-50 p-4">
-							<h3 class="font-medium text-purple-900">Today's Rain</h3>
-							<p class="text-2xl font-bold text-purple-700">
+						<div class="rounded-lg bg-purple-50 p-3">
+							<h3 class="text-sm font-medium text-purple-900">Today's Rain</h3>
+							<p class="text-xl font-bold text-purple-700">
 								{currentWeather.daily?.precipitation_sum?.[0]?.toFixed(1) || '0.0'} mm
 							</p>
 						</div>
@@ -404,20 +401,20 @@
 			{/if}
 
 			<!-- Data View Toggle -->
-			<div class="mb-6 rounded-lg bg-white p-6 shadow-sm">
+			<div class="mb-4 rounded-lg bg-white p-3 shadow-sm">
 				<div class="flex items-center justify-center">
-					<div class="flex items-center space-x-4">
+					<div class="flex items-center space-x-3">
 						<span class="text-sm font-medium text-gray-700">Rainfall Analysis</span>
 						<button
 							on:click={() => (showTemperatureView = !showTemperatureView)}
 							aria-label="Toggle temperature view"
-							class="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-200 transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none {showTemperatureView
+							class="relative inline-flex h-5 w-9 items-center rounded-full bg-gray-200 transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none {showTemperatureView
 								? 'bg-blue-600'
 								: 'bg-gray-200'}"
 						>
 							<span
-								class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform {showTemperatureView
-									? 'translate-x-6'
+								class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform {showTemperatureView
+									? 'translate-x-5'
 									: 'translate-x-1'}"
 							></span>
 						</button>
@@ -427,92 +424,92 @@
 			</div>
 
 			<!-- Key Statistics -->
-			<div class="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+			<div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
 				{#if !showTemperatureView}
-					<div class="rounded-lg bg-white p-6 shadow-sm">
-						<h3 class="text-sm font-medium tracking-wide text-gray-500 uppercase">
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">
 							{currentYear} Total
 						</h3>
-						<p class="mt-2 text-3xl font-bold text-gray-900">{currentYearTotal.toFixed(1)} mm</p>
-						<p class="mt-1 text-sm text-gray-600">Year to date</p>
+						<p class="mt-1 text-2xl font-bold text-gray-900">{currentYearTotal.toFixed(1)} mm</p>
+						<p class="text-xs text-gray-600">Year to date</p>
 					</div>
 
-					<div class="rounded-lg bg-white p-6 shadow-sm">
-						<h3 class="text-sm font-medium tracking-wide text-gray-500 uppercase">90-Day Total</h3>
-						<p class="mt-2 text-3xl font-bold text-gray-900">{last90DaysTotal.toFixed(1)} mm</p>
-						<p class="mt-1 text-sm text-gray-600">Last 90 days</p>
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">90-Day Total</h3>
+						<p class="mt-1 text-2xl font-bold text-gray-900">{last90DaysTotal.toFixed(1)} mm</p>
+						<p class="text-xs text-gray-600">Last 90 days</p>
 					</div>
 
 					{#if percentiles}
-						<div class="rounded-lg bg-white p-6 shadow-sm">
-							<h3 class="text-sm font-medium tracking-wide text-gray-500 uppercase">
+						<div class="rounded-lg bg-white p-4 shadow-sm">
+							<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">
 								Median Daily Rain
 							</h3>
-							<p class="mt-2 text-3xl font-bold text-gray-900">{percentiles.p50} mm</p>
-							<p class="mt-1 text-sm text-gray-600">When it rains</p>
+							<p class="mt-1 text-2xl font-bold text-gray-900">{percentiles.p50} mm</p>
+							<p class="text-xs text-gray-600">When it rains</p>
 						</div>
 					{/if}
 
-					<div class="rounded-lg bg-white p-6 shadow-sm">
-						<h3 class="text-sm font-medium tracking-wide text-gray-500 uppercase">
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">
 							Drought Periods
 						</h3>
-						<p class="mt-2 text-3xl font-bold text-gray-900">{droughtPeriods.length}</p>
-						<p class="mt-1 text-sm text-gray-600">7+ day dry spells (90 days)</p>
+						<p class="mt-1 text-2xl font-bold text-gray-900">{droughtPeriods.length}</p>
+						<p class="text-xs text-gray-600">7+ day dry spells (90 days)</p>
 					</div>
 				{:else if temperatureStats}
-					<div class="rounded-lg bg-white p-6 shadow-sm">
-						<h3 class="text-sm font-medium tracking-wide text-gray-500 uppercase">
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">
 							Average Temperature
 						</h3>
-						<p class="mt-2 text-3xl font-bold text-gray-900">
+						<p class="mt-1 text-2xl font-bold text-gray-900">
 							{temperatureStats.mean.toFixed(1)}°C
 						</p>
-						<p class="mt-1 text-sm text-gray-600">Historical mean</p>
+						<p class="text-xs text-gray-600">Historical mean</p>
 					</div>
 
-					<div class="rounded-lg bg-white p-6 shadow-sm">
-						<h3 class="text-sm font-medium tracking-wide text-gray-500 uppercase">
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">
 							Temperature Range
 						</h3>
-						<p class="mt-2 text-3xl font-bold text-gray-900">
+						<p class="mt-1 text-2xl font-bold text-gray-900">
 							{temperatureStats.range.toFixed(1)}°C
 						</p>
-						<p class="mt-1 text-sm text-gray-600">
+						<p class="text-xs text-gray-600">
 							{temperatureStats.min.toFixed(1)}° to {temperatureStats.max.toFixed(1)}°C
 						</p>
 					</div>
 
-					<div class="rounded-lg bg-white p-6 shadow-sm">
-						<h3 class="text-sm font-medium tracking-wide text-gray-500 uppercase">Heat Waves</h3>
-						<p class="mt-2 text-3xl font-bold text-gray-900">
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">Heat Waves</h3>
+						<p class="mt-1 text-2xl font-bold text-gray-900">
 							{temperatureExtremes.heatWaves.length}
 						</p>
-						<p class="mt-1 text-sm text-gray-600">3+ days above 25°C (90 days)</p>
+						<p class="text-xs text-gray-600">3+ days above 25°C (90 days)</p>
 					</div>
 
-					<div class="rounded-lg bg-white p-6 shadow-sm">
-						<h3 class="text-sm font-medium tracking-wide text-gray-500 uppercase">Cold Snaps</h3>
-						<p class="mt-2 text-3xl font-bold text-gray-900">
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">Cold Snaps</h3>
+						<p class="mt-1 text-2xl font-bold text-gray-900">
 							{temperatureExtremes.coldSnaps.length}
 						</p>
-						<p class="mt-1 text-sm text-gray-600">3+ days below -2°C (90 days)</p>
+						<p class="text-xs text-gray-600">3+ days below -2°C (90 days)</p>
 					</div>
 				{/if}
 			</div>
 
 			<!-- Charts -->
-			<div class="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+			<div class="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
 				{#if !showTemperatureView}
 					<!-- Recent Rainfall -->
-					<div class="rounded-lg bg-white p-6 shadow-sm">
-						<h3 class="mb-4 text-lg font-semibold text-gray-900">Last 30 Days</h3>
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="mb-3 text-lg font-semibold text-gray-900">Last 30 Days</h3>
 						{#if recentData.length > 0}
 							<RainfallChart
 								data={recentData}
 								title="Daily Rainfall (Last 30 Days)"
 								type="bar"
-								height={300}
+								height={250}
 							/>
 						{:else}
 							<p class="text-gray-500">No recent data available</p>
@@ -520,14 +517,14 @@
 					</div>
 
 					<!-- Current Year vs Historical -->
-					<div class="rounded-lg bg-white p-6 shadow-sm">
-						<h3 class="mb-4 text-lg font-semibold text-gray-900">Current Year Trend</h3>
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="mb-3 text-lg font-semibold text-gray-900">Current Year Trend</h3>
 						{#if currentYearData.length > 0}
 							<RainfallChart
 								data={currentYearData}
 								title="{currentYear} Daily Rainfall"
 								type="line"
-								height={300}
+								height={250}
 							/>
 						{:else}
 							<p class="text-gray-500">No current year data available</p>
@@ -535,8 +532,8 @@
 					</div>
 				{:else}
 					<!-- Recent Temperature -->
-					<div class="rounded-lg bg-white p-6 shadow-sm">
-						<h3 class="mb-4 text-lg font-semibold text-gray-900">
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="mb-3 text-lg font-semibold text-gray-900">
 							Temperature Trends (Last 30 Days)
 						</h3>
 						{#if recentTemperatureData.length > 0}
@@ -544,7 +541,7 @@
 								data={recentTemperatureData}
 								title="Daily Temperature (Last 30 Days)"
 								type="line"
-								height={300}
+								height={250}
 								showMinMax={true}
 							/>
 						{:else}
@@ -553,8 +550,8 @@
 					</div>
 
 					<!-- Current Year Temperature -->
-					<div class="rounded-lg bg-white p-6 shadow-sm">
-						<h3 class="mb-4 text-lg font-semibold text-gray-900">Current Year Temperature</h3>
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="mb-3 text-lg font-semibold text-gray-900">Current Year Temperature</h3>
 						{#if temperatureData.length > 0}
 							{@const currentYearTempData = temperatureData.filter(
 								(d) => new Date(d.date).getFullYear() === currentYear
@@ -563,7 +560,7 @@
 								data={currentYearTempData}
 								title="{currentYear} Temperature Trend"
 								type="line"
-								height={300}
+								height={250}
 								showMinMax={false}
 							/>
 						{:else}
@@ -575,211 +572,251 @@
 
 			<!-- Yearly Comparison Cards -->
 			{#if displayedComparison.length > 0}
-				<div class="mb-6 rounded-lg bg-white p-6 shadow-sm">
-					<div class="mb-6 flex items-center justify-between">
+				<div class="mb-4 rounded-lg bg-white p-4 shadow-sm">
+					<div class="mb-4 flex items-center justify-between">
 						<h3 class="text-lg font-semibold text-gray-900">
 							{showMonthlyComparison ? `${currentMonthName} Comparison` : '10-Year Comparison'}
 						</h3>
-						<div class="flex items-center space-x-3">
-							<span class="text-sm text-gray-600"> Yearly view </span>
+						<div class="flex items-center space-x-2">
+							<span class="text-xs text-gray-600"> Yearly view </span>
 							<button
 								on:click={() => (showMonthlyComparison = !showMonthlyComparison)}
 								aria-label="Toggle monthly view"
-								class="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-200 transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none {showMonthlyComparison
+								class="relative inline-flex h-5 w-9 items-center rounded-full bg-gray-200 transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none {showMonthlyComparison
 									? 'bg-blue-600'
 									: 'bg-gray-200'}"
 							>
 								<span
-									class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform {showMonthlyComparison
-										? 'translate-x-6'
+									class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform {showMonthlyComparison
+										? 'translate-x-5'
 										: 'translate-x-1'}"
 								></span>
 							</button>
-							<span class="text-sm text-gray-600"> Monthly view </span>
+							<span class="text-xs text-gray-600"> Monthly view </span>
 						</div>
 					</div>
 
-					<!-- Visual Cards Layout -->
-					<div class="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-						{#each displayedComparison as year, index}
-							{@const percentageVsAverage = (year.totalRainfall / averageYearlyTotal - 1) * 100}
-							{@const isAboveAverage = year.totalRainfall > averageYearlyTotal}
-							{@const isCurrentYear = year.year === currentYear}
-							{@const maxRainfall = Math.max(...displayedComparison.map((y) => y.totalRainfall))}
-							{@const rainfallPercentage = (year.totalRainfall / maxRainfall) * 100}
+					<!-- Visual Cards Layout with Show More functionality -->
+					<div class="relative">
+						<div class="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+							{#each displayedComparison as year, index}
+								{@const percentageVsAverage = (year.totalRainfall / averageYearlyTotal - 1) * 100}
+								{@const isAboveAverage = year.totalRainfall > averageYearlyTotal}
+								{@const isCurrentYear = year.year === currentYear}
+								{@const maxRainfall = Math.max(...displayedComparison.map((y) => y.totalRainfall))}
+								{@const rainfallPercentage = (year.totalRainfall / maxRainfall) * 100}
+								{@const isInFirstRow = index < 4}
+								{@const isInSecondRow = index >= 4 && index < 8}
+								{@const shouldShow = showAllComparisons || isInFirstRow || isInSecondRow}
 
-							<div
-								class="group relative overflow-hidden rounded-lg border transition-all duration-200 hover:shadow-lg {isCurrentYear
-									? 'border-blue-300 bg-gradient-to-br from-blue-50 to-indigo-50 ring-2 ring-blue-200'
-									: isAboveAverage
-										? 'border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 hover:border-green-300'
-										: 'border-red-200 bg-gradient-to-br from-red-50 to-orange-50 hover:border-red-300'}"
-							>
-								<!-- Year Badge -->
-								<div class="absolute top-3 right-3">
-									{#if isCurrentYear}
-										<span
-											class="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800"
-										>
-											<svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
-												<path
-													fill-rule="evenodd"
-													d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-													clip-rule="evenodd"
-												></path>
-											</svg>
-											Current
-										</span>
-									{:else if index === 0 && !isCurrentYear}
-										<span
-											class="inline-flex items-center rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-800"
-										>
-											Latest
-										</span>
-									{/if}
-								</div>
-
-								<div class="p-5">
-									<!-- Year and Trend Icon -->
-									<div class="mb-3 flex items-center">
-										<h4
-											class="text-2xl font-bold {isCurrentYear ? 'text-blue-900' : 'text-gray-900'}"
-										>
-											{year.year}
-										</h4>
-										<div class="ml-2">
-											{#if isAboveAverage}
-												<svg
-													class="h-5 w-5 text-green-500"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
+								{#if shouldShow}
+									<div
+										class="group relative overflow-hidden rounded-lg border transition-all duration-200 hover:shadow-md {isCurrentYear
+											? 'border-blue-300 bg-gradient-to-br from-blue-50 to-indigo-50 ring-1 ring-blue-200'
+											: isAboveAverage
+												? 'border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 hover:border-green-300'
+												: 'border-red-200 bg-gradient-to-br from-red-50 to-orange-50 hover:border-red-300'} {!showAllComparisons &&
+										isInSecondRow
+											? 'pointer-events-none opacity-40 blur-[1px]'
+											: ''}"
+									>
+										<!-- Year Badge -->
+										<div class="absolute top-2 right-2">
+											{#if isCurrentYear}
+												<span
+													class="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800"
 												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-													></path>
-												</svg>
-											{:else}
-												<svg
-													class="h-5 w-5 text-red-500"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
+													<i class="fa-solid fa-circle-check mr-1"></i>
+													Current
+												</span>
+											{:else if index === 0 && !isCurrentYear}
+												<span
+													class="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800"
 												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"
-													></path>
-												</svg>
+													Latest
+												</span>
 											{/if}
 										</div>
-									</div>
 
-									<!-- Main Rainfall Amount -->
-									<div class="mb-4">
-										<p
-											class="text-3xl font-bold {isCurrentYear
-												? 'text-blue-700'
-												: isAboveAverage
-													? 'text-green-700'
-													: 'text-red-700'}"
-										>
-											{year.totalRainfall.toFixed(0)}
-											<span class="text-lg font-medium text-gray-600">mm</span>
-										</p>
-										<p class="text-sm text-gray-600">
-											{showMonthlyComparison ? `${currentMonthName} total` : 'Total rainfall'}
-										</p>
-									</div>
+										<div class="p-3">
+											<!-- Year and Trend Icon -->
+											<div class="mb-2 flex items-center">
+												<h4
+													class="text-xl font-bold {isCurrentYear
+														? 'text-blue-900'
+														: 'text-gray-900'}"
+												>
+													{year.year}
+												</h4>
+												<div class="ml-1">
+													{#if isAboveAverage}
+														<svg
+															class="h-4 w-4 text-green-500"
+															fill="none"
+															stroke="currentColor"
+															viewBox="0 0 24 24"
+														>
+															<path
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																stroke-width="2"
+																d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+															></path>
+														</svg>
+													{:else}
+														<svg
+															class="h-4 w-4 text-red-500"
+															fill="none"
+															stroke="currentColor"
+															viewBox="0 0 24 24"
+														>
+															<path
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																stroke-width="2"
+																d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"
+															></path>
+														</svg>
+													{/if}
+												</div>
+											</div>
 
-									<!-- Visual Progress Bar -->
-									<div class="mb-4">
-										<div class="mb-2 flex justify-between text-xs text-gray-600">
-											<span>Relative to max year</span>
-											<span>{rainfallPercentage.toFixed(0)}%</span>
-										</div>
-										<div class="h-2 w-full rounded-full bg-gray-200">
-											<div
-												class="h-2 rounded-full transition-all duration-500 {isCurrentYear
-													? 'bg-gradient-to-r from-blue-400 to-blue-600'
-													: isAboveAverage
-														? 'bg-gradient-to-r from-green-400 to-green-600'
-														: 'bg-gradient-to-r from-red-400 to-red-600'}"
-												style="width: {rainfallPercentage}%"
-											></div>
-										</div>
-									</div>
-
-									<!-- Statistics Grid -->
-									<div class="grid grid-cols-2 gap-3 text-sm">
-										<div class="rounded-lg bg-white/60 p-3">
-											<p class="font-medium text-gray-700">
-												{showMonthlyComparison ? 'Daily Avg' : 'Monthly Avg'}
-											</p>
-											<p class="text-lg font-bold text-gray-900">
-												{year.averageMonthly.toFixed(1)} mm
-											</p>
-										</div>
-										<div class="rounded-lg bg-white/60 p-3">
-											<p class="font-medium text-gray-700">Wet Days</p>
-											<p class="text-lg font-bold text-gray-900">{year.wetDays}</p>
-										</div>
-										{#if year.averageTemperature !== undefined}
-											<div class="rounded-lg bg-white/60 p-3">
-												<p class="font-medium text-gray-700">Avg Temp</p>
-												<p class="text-lg font-bold text-gray-900">
-													{year.averageTemperature.toFixed(1)}°C
+											<!-- Main Rainfall Amount -->
+											<div class="mb-3">
+												<p
+													class="text-2xl font-bold {isCurrentYear
+														? 'text-blue-700'
+														: isAboveAverage
+															? 'text-green-700'
+															: 'text-red-700'}"
+												>
+													{year.totalRainfall.toFixed(0)}
+													<span class="text-sm font-medium text-gray-600">mm</span>
+												</p>
+												<p class="text-xs text-gray-600">
+													{showMonthlyComparison ? `${currentMonthName} total` : 'Total rainfall'}
 												</p>
 											</div>
-											<div class="rounded-lg bg-white/60 p-3">
-												<p class="font-medium text-gray-700">Temp Range</p>
-												<p class="text-lg font-bold text-gray-900">
-													{year.minTemperature?.toFixed(0)}° - {year.maxTemperature?.toFixed(0)}°C
-												</p>
-											</div>
-										{/if}
-									</div>
 
-									<!-- Comparison Badge -->
-									<div class="mt-4 flex items-center justify-center">
-										<div
-											class="rounded-full px-3 py-1 text-sm font-medium {isAboveAverage
-												? 'bg-green-100 text-green-800'
-												: 'bg-red-100 text-red-800'}"
-										>
-											{isAboveAverage ? '+' : ''}{percentageVsAverage.toFixed(0)}% vs average
+											<!-- Visual Progress Bar -->
+											<div class="mb-3">
+												<div class="mb-1 flex justify-between text-xs text-gray-600">
+													<span>vs max year</span>
+													<span>{rainfallPercentage.toFixed(0)}%</span>
+												</div>
+												<div class="h-1.5 w-full rounded-full bg-gray-200">
+													<div
+														class="h-1.5 rounded-full transition-all duration-500 {isCurrentYear
+															? 'bg-gradient-to-r from-blue-400 to-blue-600'
+															: isAboveAverage
+																? 'bg-gradient-to-r from-green-400 to-green-600'
+																: 'bg-gradient-to-r from-red-400 to-red-600'}"
+														style="width: {rainfallPercentage}%"
+													></div>
+												</div>
+											</div>
+
+											<!-- Statistics Grid -->
+											<div class="grid grid-cols-2 gap-2 text-xs">
+												<div class="rounded-lg bg-white/60 p-2">
+													<p class="font-medium text-gray-700">
+														{showMonthlyComparison ? 'Daily Avg' : 'Monthly Avg'}
+													</p>
+													<p class="text-sm font-bold text-gray-900">
+														{year.averageMonthly.toFixed(1)} mm
+													</p>
+												</div>
+												<div class="rounded-lg bg-white/60 p-2">
+													<p class="font-medium text-gray-700">Wet Days</p>
+													<p class="text-sm font-bold text-gray-900">{year.wetDays}</p>
+												</div>
+												{#if year.averageTemperature !== undefined}
+													<div class="rounded-lg bg-white/60 p-2">
+														<p class="font-medium text-gray-700">Avg Temp</p>
+														<p class="text-sm font-bold text-gray-900">
+															{year.averageTemperature.toFixed(1)}°C
+														</p>
+													</div>
+													<div class="rounded-lg bg-white/60 p-2">
+														<p class="font-medium text-gray-700">Range</p>
+														<p class="text-sm font-bold text-gray-900">
+															{year.minTemperature?.toFixed(0)}° - {year.maxTemperature?.toFixed(
+																0
+															)}°C
+														</p>
+													</div>
+												{/if}
+											</div>
+
+											<!-- Comparison Badge -->
+											<div class="mt-3 flex items-center justify-center">
+												<div
+													class="rounded-full px-2 py-1 text-xs font-medium {isAboveAverage
+														? 'bg-green-100 text-green-800'
+														: 'bg-red-100 text-red-800'}"
+												>
+													{isAboveAverage ? '+' : ''}{percentageVsAverage.toFixed(0)}% vs avg
+												</div>
+											</div>
 										</div>
 									</div>
-								</div>
+								{/if}
+							{/each}
+						</div>
+
+						<!-- Show More/Less Button -->
+						{#if displayedComparison.length > 4}
+							<div class="mt-4 flex justify-center">
+								<button
+									on:click={() => (showAllComparisons = !showAllComparisons)}
+									class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-all duration-200 hover:border-gray-400 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+								>
+									{#if showAllComparisons}
+										<svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M5 15l7-7 7 7"
+											></path>
+										</svg>
+										Show Less
+									{:else}
+										<svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M19 9l-7 7-7-7"
+											></path>
+										</svg>
+										View More ({displayedComparison.length - 4} more years)
+									{/if}
+								</button>
 							</div>
-						{/each}
+						{/if}
 					</div>
 
 					<!-- Summary Stats -->
-					<div class="mt-6 rounded-lg bg-gray-50 p-4">
-						<div class="grid grid-cols-1 gap-4 text-sm md:grid-cols-3">
+					<div class="mt-4 rounded-lg bg-gray-50 p-3">
+						<div class="grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
 							<div class="text-center">
 								<p class="font-medium text-gray-700">
 									Average {showMonthlyComparison ? currentMonthName : 'Annual'}
 								</p>
-								<p class="text-xl font-bold text-gray-900">{averageYearlyTotal.toFixed(0)} mm</p>
+								<p class="text-lg font-bold text-gray-900">{averageYearlyTotal.toFixed(0)} mm</p>
 							</div>
 							<div class="text-center">
 								<p class="font-medium text-gray-700">
 									Wettest {showMonthlyComparison ? currentMonthName : 'Year'}
 								</p>
 								{#if wettestYear}
-									<p class="text-xl font-bold text-green-700">
+									<p class="text-lg font-bold text-green-700">
 										{wettestYear.totalRainfall.toFixed(0)} mm
 									</p>
 									<p class="text-xs text-gray-600">{wettestYear.year}</p>
 								{:else}
-									<p class="text-xl font-bold text-gray-700">N/A</p>
+									<p class="text-lg font-bold text-gray-700">N/A</p>
 								{/if}
 							</div>
 							<div class="text-center">
@@ -787,12 +824,12 @@
 									Driest {showMonthlyComparison ? currentMonthName : 'Year'}
 								</p>
 								{#if driestYear}
-									<p class="text-xl font-bold text-red-700">
+									<p class="text-lg font-bold text-red-700">
 										{driestYear.totalRainfall.toFixed(0)} mm
 									</p>
 									<p class="text-xs text-gray-600">{driestYear.year}</p>
 								{:else}
-									<p class="text-xl font-bold text-gray-700">N/A</p>
+									<p class="text-lg font-bold text-gray-700">N/A</p>
 								{/if}
 							</div>
 						</div>
@@ -803,13 +840,11 @@
 			<!-- Drought Analysis / Temperature Extremes -->
 			{#if !showTemperatureView}
 				{#if droughtPeriods.length > 0}
-					<div class="rounded-lg bg-white p-6 shadow-sm">
-						<div class="mb-6 flex items-center">
-							<div
-								class="mr-3 flex h-10 w-10 items-center justify-center rounded-full bg-orange-100"
-							>
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<div class="mb-4 flex items-center">
+							<div class="mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-orange-100">
 								<svg
-									class="h-6 w-6 text-orange-600"
+									class="h-5 w-5 text-orange-600"
 									fill="none"
 									stroke="currentColor"
 									viewBox="0 0 24 24"
@@ -824,37 +859,37 @@
 							</div>
 							<div>
 								<h3 class="text-lg font-semibold text-gray-900">Notable Drought Periods</h3>
-								<p class="text-sm text-gray-600">
+								<p class="text-xs text-gray-600">
 									Dry spells of 7+ consecutive days (last 90 days)
 								</p>
 							</div>
 						</div>
 
-						<div class="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
+						<div class="grid gap-3 sm:grid-cols-1 lg:grid-cols-2">
 							{#each droughtPeriods.slice(0, 6) as drought, index}
 								<div
-									class="group relative overflow-hidden rounded-lg border border-gray-200 bg-gradient-to-r from-orange-50 to-yellow-50 p-4 transition-all duration-200 hover:border-orange-300 hover:shadow-md"
+									class="group relative overflow-hidden rounded-lg border border-gray-200 bg-gradient-to-r from-orange-50 to-yellow-50 p-3 transition-all duration-200 hover:border-orange-300 hover:shadow-md"
 								>
 									<div class="flex items-start justify-between">
 										<div class="flex-1">
 											<div class="mb-2 flex items-center">
 												<div
-													class="mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-orange-200 text-orange-800"
+													class="mr-2 flex h-6 w-6 items-center justify-center rounded-full bg-orange-200 text-orange-800"
 												>
-													<span class="text-sm font-bold">{index + 1}</span>
+													<span class="text-xs font-bold">{index + 1}</span>
 												</div>
 												<div class="flex items-center text-orange-700">
-													<svg class="mr-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+													<svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
 														<path
 															fill-rule="evenodd"
 															d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"
 															clip-rule="evenodd"
 														></path>
 													</svg>
-													<span class="font-semibold">{drought.duration} days</span>
+													<span class="text-sm font-semibold">{drought.duration} days</span>
 												</div>
 											</div>
-											<p class="mb-1 text-sm font-medium text-gray-800">No significant rainfall</p>
+											<p class="mb-1 text-xs font-medium text-gray-800">No significant rainfall</p>
 											<div class="flex items-center text-xs text-gray-600">
 												<svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
 													<path
@@ -871,8 +906,8 @@
 												</span>
 											</div>
 										</div>
-										<div class="ml-3 flex flex-col items-end">
-											<div class="rounded-full bg-orange-200 px-2 py-1">
+										<div class="ml-2 flex flex-col items-end">
+											<div class="rounded-full bg-orange-200 px-2 py-0.5">
 												<span class="text-xs font-medium text-orange-800">
 													{drought.duration >= 14
 														? 'Severe'
@@ -885,11 +920,10 @@
 									</div>
 
 									<!-- Progress bar showing drought severity -->
-									<div class="mt-3">
-										<div class="h-1.5 w-full rounded-full bg-orange-200">
+									<div class="mt-2">
+										<div class="h-1 w-full rounded-full bg-orange-200">
 											<div
-												class="h-1.5 rounded-full transition-all duration-300 {drought.duration >=
-												14
+												class="h-1 rounded-full transition-all duration-300 {drought.duration >= 14
 													? 'bg-red-500'
 													: drought.duration >= 10
 														? 'bg-orange-500'
@@ -907,20 +941,20 @@
 						</div>
 
 						{#if droughtPeriods.length > 6}
-							<div class="mt-4 text-center">
-								<p class="text-sm text-gray-500">
+							<div class="mt-3 text-center">
+								<p class="text-xs text-gray-500">
 									Showing 6 of {droughtPeriods.length} drought periods
 								</p>
 							</div>
 						{/if}
 
 						{#if droughtPeriods.length === 0}
-							<div class="py-8 text-center">
+							<div class="py-6 text-center">
 								<div
-									class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100"
+									class="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-green-100"
 								>
 									<svg
-										class="h-6 w-6 text-green-600"
+										class="h-5 w-5 text-green-600"
 										fill="none"
 										stroke="currentColor"
 										viewBox="0 0 24 24"
@@ -936,7 +970,7 @@
 								<h4 class="mt-2 text-sm font-medium text-gray-900">
 									No significant drought periods
 								</h4>
-								<p class="mt-1 text-sm text-gray-500">
+								<p class="mt-1 text-xs text-gray-500">
 									No dry spells of 7+ days in the last 90 days
 								</p>
 							</div>
@@ -946,11 +980,11 @@
 			{:else}
 				<!-- Temperature Extremes Analysis -->
 				{#if temperatureExtremes.heatWaves.length > 0 || temperatureExtremes.coldSnaps.length > 0}
-					<div class="rounded-lg bg-white p-6 shadow-sm">
-						<div class="mb-6 flex items-center">
-							<div class="mr-3 flex h-10 w-10 items-center justify-center rounded-full bg-red-100">
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<div class="mb-4 flex items-center">
+							<div class="mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-red-100">
 								<svg
-									class="h-6 w-6 text-red-600"
+									class="h-5 w-5 text-red-600"
 									fill="none"
 									stroke="currentColor"
 									viewBox="0 0 24 24"
@@ -965,34 +999,34 @@
 							</div>
 							<div>
 								<h3 class="text-lg font-semibold text-gray-900">Temperature Extremes</h3>
-								<p class="text-sm text-gray-600">Heat waves and cold snaps (last 90 days)</p>
+								<p class="text-xs text-gray-600">Heat waves and cold snaps (last 90 days)</p>
 							</div>
 						</div>
 
 						<!-- Heat Waves -->
 						{#if temperatureExtremes.heatWaves.length > 0}
-							<div class="mb-6">
-								<h4 class="text-md mb-3 font-medium text-gray-900">
+							<div class="mb-4">
+								<h4 class="text-md mb-2 font-medium text-gray-900">
 									Heat Waves (3+ days above 25°C)
 								</h4>
-								<div class="grid gap-3 sm:grid-cols-1 lg:grid-cols-2">
+								<div class="grid gap-2 sm:grid-cols-1 lg:grid-cols-2">
 									{#each temperatureExtremes.heatWaves.slice(0, 4) as heatWave, index}
 										<div
-											class="group relative overflow-hidden rounded-lg border border-red-200 bg-gradient-to-r from-red-50 to-orange-50 p-3 transition-all duration-200 hover:border-red-300 hover:shadow-md"
+											class="group relative overflow-hidden rounded-lg border border-red-200 bg-gradient-to-r from-red-50 to-orange-50 p-2 transition-all duration-200 hover:border-red-300 hover:shadow-md"
 										>
 											<div class="flex items-start justify-between">
 												<div class="flex-1">
-													<div class="mb-2 flex items-center">
+													<div class="mb-1 flex items-center">
 														<div
-															class="mr-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-200 text-red-800"
+															class="mr-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-200 text-red-800"
 														>
 															<span class="text-xs font-bold">{index + 1}</span>
 														</div>
 														<div class="flex items-center text-red-700">
-															<span class="text-sm font-semibold">{heatWave.duration} days</span>
+															<span class="text-xs font-semibold">{heatWave.duration} days</span>
 														</div>
 													</div>
-													<p class="mb-1 text-sm font-medium text-gray-800">
+													<p class="mb-1 text-xs font-medium text-gray-800">
 														Peak: {heatWave.maxTemp.toFixed(1)}°C
 													</p>
 													<div class="flex items-center text-xs text-gray-600">
@@ -1013,25 +1047,25 @@
 
 						<!-- Cold Snaps -->
 						{#if temperatureExtremes.coldSnaps.length > 0}
-							<div class="mb-6">
-								<h4 class="text-md mb-3 font-medium text-gray-900">
+							<div class="mb-4">
+								<h4 class="text-md mb-2 font-medium text-gray-900">
 									Cold Snaps (3+ days below -2°C)
 								</h4>
-								<div class="grid gap-3 sm:grid-cols-1 lg:grid-cols-2">
+								<div class="grid gap-2 sm:grid-cols-1 lg:grid-cols-2">
 									{#each temperatureExtremes.coldSnaps.slice(0, 4) as coldSnap, index}
 										<div
-											class="group relative overflow-hidden rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-cyan-50 p-3 transition-all duration-200 hover:border-blue-300 hover:shadow-md"
+											class="group relative overflow-hidden rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-cyan-50 p-2 transition-all duration-200 hover:border-blue-300 hover:shadow-md"
 										>
 											<div class="flex items-start justify-between">
 												<div class="flex-1">
-													<div class="mb-2 flex items-center">
+													<div class="mb-1 flex items-center">
 														<div
-															class="mr-2 flex h-6 w-6 items-center justify-center rounded-full bg-blue-200 text-blue-800"
+															class="mr-2 flex h-5 w-5 items-center justify-center rounded-full bg-blue-200 text-blue-800"
 														>
 															<span class="text-xs font-bold">{index + 1}</span>
 														</div>
 														<div class="flex items-center text-blue-700">
-															<span class="text-sm font-semibold">{coldSnap.duration} days</span>
+															<span class="text-xs font-semibold">{coldSnap.duration} days</span>
 														</div>
 													</div>
 													<p class="mb-1 text-sm font-medium text-gray-800">
@@ -1090,8 +1124,8 @@
 					<h2 class="mb-6 text-2xl font-semibold text-gray-900">Enhanced Analysis</h2>
 
 					<!-- Trends -->
-					<div class="mb-6 rounded-lg bg-white p-6 shadow-sm">
-						<h3 class="mb-4 text-xl font-semibold text-gray-800">Overall Trends (10-Year)</h3>
+					<div class="mb-6 rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="mb-4 text-lg font-semibold text-gray-900">Overall Trends (10-Year)</h3>
 						<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 							{#if enhancedStats.rainfallTrend}
 								<div class="rounded-lg bg-blue-50 p-4">
@@ -1145,7 +1179,7 @@
 								</svg>
 							</div>
 							<div>
-								<h3 class="text-xl font-semibold text-gray-900">Seasonal Analysis</h3>
+								<h3 class="text-lg font-semibold text-gray-900">Seasonal Analysis</h3>
 								<p class="text-sm text-gray-600">10-year seasonal averages and patterns</p>
 							</div>
 						</div>
@@ -1171,43 +1205,13 @@
 													class="mr-3 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br {season.colors} shadow-lg"
 												>
 													{#if season.name === 'Spring'}
-														<svg class="h-6 w-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-															<path
-																fill-rule="evenodd"
-																d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H6zm1 2a1 1 0 000 2h6a1 1 0 100-2H7zm6 7a1 1 0 011 1v3a1 1 0 11-2 0v-3a1 1 0 011-1zm-3 3a1 1 0 100 2h.01a1 1 0 100-2H10zm-4 1a1 1 0 011-1h.01a1 1 0 110 2H7a1 1 0 01-1-1zm1-4a1 1 0 100 2h.01a1 1 0 100-2H7zm2 1a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1zm4-4a1 1 0 100 2h.01a1 1 0 100-2H13zM9 9a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1zM7 8a1 1 0 000 2h.01a1 1 0 000-2H7z"
-																clip-rule="evenodd"
-															></path>
-														</svg>
+														<i class="fa-solid fa-flower-tulip fa-lg" style="color: #FFFFFF;"></i>
 													{:else if season.name === 'Summer'}
-														<svg
-															class="h-6 w-6 text-white"
-															fill="none"
-															stroke="currentColor"
-															viewBox="0 0 24 24"
-														>
-															<path
-																stroke-linecap="round"
-																stroke-linejoin="round"
-																stroke-width="2"
-																d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
-															></path>
-														</svg>
+														<i class="fa-solid fa-sun-bright fa-lg" style="color: #FFFFFF;"></i>
 													{:else if season.name === 'Autumn'}
-														<svg class="h-6 w-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-															<path
-																fill-rule="evenodd"
-																d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 6.707 6.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3z"
-																clip-rule="evenodd"
-															></path>
-														</svg>
+														<i class="fa-solid fa-leaf-maple fa-lg" style="color: #FFFFFF;"></i>
 													{:else}
-														<svg class="h-6 w-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-															<path
-																fill-rule="evenodd"
-																d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
-																clip-rule="evenodd"
-															></path>
-														</svg>
+														<i class="fa-solid fa-snowflake fa-lg" style="color: #FFFFFF;"></i>
 													{/if}
 												</div>
 												<div>
@@ -1221,100 +1225,97 @@
 										</div>
 
 										<!-- Statistics Grid -->
-										<div class="space-y-4">
-											{#if sRain && sRain.length > 0}
+										<div class="space-y-3">
+											{#if (sRain && sRain.length > 0) || (sTemp && sTemp.length > 0)}
 												{@const avgTotalRain =
-													sRain.reduce((acc: number, curr) => acc + curr.totalRainfall, 0) /
-													sRain.length}
+													sRain && sRain.length > 0
+														? sRain.reduce((acc: number, curr) => acc + curr.totalRainfall, 0) /
+															sRain.length
+														: 0}
 												{@const avgWetDays =
-													sRain.reduce((acc: number, curr) => acc + curr.wetDays, 0) / sRain.length}
-
-												<!-- Rainfall Stats -->
-												<div class="rounded-lg bg-white/70 p-4 backdrop-blur-sm">
-													<div class="mb-3 flex items-center">
-														<svg
-															class="mr-2 h-5 w-5 {season.textColors}"
-															fill="currentColor"
-															viewBox="0 0 20 20"
-														>
-															<path
-																fill-rule="evenodd"
-																d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
-																clip-rule="evenodd"
-															></path>
-														</svg>
-														<h5 class="font-semibold text-gray-800">Rainfall</h5>
-													</div>
-													<div class="grid grid-cols-2 gap-4">
-														<div class="text-center">
-															<p class="text-2xl font-bold {season.textColors}">
-																{avgTotalRain.toFixed(1)}
-																<span class="text-sm font-medium text-gray-600">mm</span>
-															</p>
-															<p class="text-xs text-gray-600">Average Total</p>
-														</div>
-														<div class="text-center">
-															<p class="text-2xl font-bold {season.textColors}">
-																{avgWetDays.toFixed(0)}
-																<span class="text-sm font-medium text-gray-600">days</span>
-															</p>
-															<p class="text-xs text-gray-600">Wet Days</p>
-														</div>
-													</div>
-												</div>
-											{/if}
-
-											{#if sTemp && sTemp.length > 0}
+													sRain && sRain.length > 0
+														? sRain.reduce((acc: number, curr) => acc + curr.wetDays, 0) /
+															sRain.length
+														: 0}
 												{@const avgTemp =
-													sTemp.reduce((acc: number, curr) => acc + curr.averageTemperature, 0) /
-													sTemp.length}
+													sTemp && sTemp.length > 0
+														? sTemp.reduce(
+																(acc: number, curr) => acc + curr.averageTemperature,
+																0
+															) / sTemp.length
+														: 0}
 												{@const avgFrostDays =
-													sTemp.reduce((acc: number, curr) => acc + curr.frostDays, 0) /
-													sTemp.length}
+													sTemp && sTemp.length > 0
+														? sTemp.reduce((acc: number, curr) => acc + curr.frostDays, 0) /
+															sTemp.length
+														: 0}
 												{@const avgWarmDays =
-													sTemp.reduce((acc: number, curr) => acc + curr.warmDays, 0) /
-													sTemp.length}
+													sTemp && sTemp.length > 0
+														? sTemp.reduce((acc: number, curr) => acc + curr.warmDays, 0) /
+															sTemp.length
+														: 0}
 
-												<!-- Temperature Stats -->
+												<!-- Combined Stats -->
 												<div class="rounded-lg bg-white/70 p-4 backdrop-blur-sm">
-													<div class="mb-3 flex items-center">
-														<svg
-															class="mr-2 h-5 w-5 {season.textColors}"
-															fill="none"
-															stroke="currentColor"
-															viewBox="0 0 24 24"
-														>
-															<path
-																stroke-linecap="round"
-																stroke-linejoin="round"
-																stroke-width="2"
-																d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-															></path>
-														</svg>
-														<h5 class="font-semibold text-gray-800">Temperature</h5>
-													</div>
-													<div class="grid grid-cols-3 gap-3">
-														<div class="text-center">
-															<p class="text-xl font-bold {season.textColors}">
-																{avgTemp.toFixed(1)}
-																<span class="text-xs font-medium text-gray-600">°C</span>
-															</p>
-															<p class="text-xs text-gray-600">Average</p>
-														</div>
-														<div class="text-center">
-															<p class="text-xl font-bold {season.textColors}">
-																{avgFrostDays.toFixed(0)}
-																<span class="text-xs font-medium text-gray-600">days</span>
-															</p>
-															<p class="text-xs text-gray-600">Frost</p>
-														</div>
-														<div class="text-center">
-															<p class="text-xl font-bold {season.textColors}">
-																{avgWarmDays.toFixed(0)}
-																<span class="text-xs font-medium text-gray-600">days</span>
-															</p>
-															<p class="text-xs text-gray-600">Warm (>20°C)</p>
-														</div>
+													<div class="grid grid-cols-2 gap-6 md:grid-cols-5">
+														<!-- Rainfall Stats -->
+														{#if sRain && sRain.length > 0}
+															<div class="text-center">
+																<div class="mb-1 flex items-center justify-center">
+																	<i class="fa-solid fa-cloud-showers-water {season.textColors}"
+																	></i>
+																</div>
+																<p class="text-lg font-bold {season.textColors}">
+																	{avgTotalRain.toFixed(1)}
+																	<span class="text-xs font-medium text-gray-600">mm</span>
+																</p>
+																<p class="text-xs text-gray-600">Rainfall</p>
+															</div>
+															<div class="text-center">
+																<div class="mb-1 flex items-center justify-center">
+																	<i class="fa-regular fa-calendar {season.textColors}"></i>
+																</div>
+																<p class="text-lg font-bold {season.textColors}">
+																	{avgWetDays.toFixed(0)}
+																	<span class="text-xs font-medium text-gray-600">days</span>
+																</p>
+																<p class="text-xs text-gray-600">Wet Days</p>
+															</div>
+														{/if}
+
+														<!-- Temperature Stats -->
+														{#if sTemp && sTemp.length > 0}
+															<div class="text-center">
+																<div class="mb-1 flex items-center justify-center">
+																	<i class="fa-solid fa-temperature-list {season.textColors}"></i>
+																</div>
+																<p class="text-lg font-bold {season.textColors}">
+																	{avgTemp.toFixed(1)}
+																	<span class="text-xs font-medium text-gray-600">°C</span>
+																</p>
+																<p class="text-xs text-gray-600">Avg Temp</p>
+															</div>
+															<div class="text-center">
+																<div class="mb-1 flex items-center justify-center">
+																	<i class="fa-solid fa-snowflake {season.textColors}"></i>
+																</div>
+																<p class="text-lg font-bold {season.textColors}">
+																	{avgFrostDays.toFixed(0)}
+																	<span class="text-xs font-medium text-gray-600">days</span>
+																</p>
+																<p class="text-xs text-gray-600">Frost</p>
+															</div>
+															<div class="text-center">
+																<div class="mb-1 flex items-center justify-center">
+																	<i class="fa-solid fa-sun-bright {season.textColors}"></i>
+																</div>
+																<p class="text-lg font-bold {season.textColors}">
+																	{avgWarmDays.toFixed(0)}
+																	<span class="text-xs font-medium text-gray-600">days</span>
+																</p>
+																<p class="text-xs text-gray-600">Warm</p>
+															</div>
+														{/if}
 													</div>
 												</div>
 											{/if}
@@ -1422,9 +1423,9 @@
 	</div>
 
 	<!-- Data Sources Footnote -->
-	<div class="mt-8 border-t border-gray-200 pt-6">
+	<div class="mt-8 border-t border-gray-200 bg-gray-200 pt-6">
 		<div class="mx-auto max-w-7xl px-4">
-			<div class="rounded-lg bg-gray-50 p-4">
+			<div class="rounded-lg bg-gray-200 p-4">
 				<h4 class="mb-2 text-sm font-semibold text-gray-700">Data Sources</h4>
 				<div class="space-y-1 text-xs text-gray-600">
 					<p>
@@ -1457,6 +1458,13 @@
 						API requests.
 					</p>
 					<p class="mt-2 text-gray-500">
+						<a
+							href="https://github.com/lukeoregan/rainfall-dashboard"
+							target="_blank"
+							rel="noopener noreferrer"
+							class="text-blue-600 underline hover:text-blue-800">View source code on GitHub</a
+						>
+						-
 						<em
 							>Last updated: {new Date().toLocaleDateString('en-GB', {
 								year: 'numeric',
@@ -1466,8 +1474,25 @@
 								minute: '2-digit'
 							})}</em
 						>
+						-
 					</p>
 				</div>
+				<h4 class="mt-4 mb-2 text-sm font-semibold text-gray-700">Support My Project</h4>
+				<p class="text-xs text-gray-600">
+					<a href="https://buymeacoffee.com/lukeoregan" target="_blank" rel="noopener noreferrer"
+						><strong>Buy me a coffee</strong> - buymeacoffee.com/lukeoregan</a
+					>
+				</p>
+				<p class="text-xs text-gray-600">
+					<i class="fa-brands fa-bitcoin"></i> <strong>Bitcoin:</strong> 328fUT3qVNZJ8EbHGaZ3M1VvCzEbFGW39f
+				</p>
+				<p class="text-xs text-gray-600">
+					<i class="fa-brands fa-ethereum"></i> <strong>Ethereum:</strong>
+					0xF63794858A90629f7366e4d2e5817e024c2Ae365
+				</p>
+				<p class="text-xs text-gray-600">
+					<strong>Solana:</strong> 2zgoiSUhb8yo3eu35te9BcSQoa6wdVTmpi8AEHd49Jdj
+				</p>
 			</div>
 		</div>
 	</div>

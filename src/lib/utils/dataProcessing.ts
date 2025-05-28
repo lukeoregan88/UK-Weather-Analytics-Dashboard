@@ -484,6 +484,29 @@ export function calculateEnhancedYearlyComparison(
 }
 
 /**
+ * Enhanced monthly comparison with temperature data
+ */
+export function calculateEnhancedMonthlyComparison(
+	rainfallData: RainfallData[],
+	temperatureData: TemperatureData[],
+	targetMonth: number
+): YearlyComparison[] {
+	const rainfallComparison = calculateMonthlyComparison(rainfallData, targetMonth);
+	const temperatureComparison = calculateMonthlyTemperatureComparison(temperatureData, targetMonth);
+
+	// Merge the data
+	return rainfallComparison.map((rainfall) => {
+		const temperature = temperatureComparison.find((t) => t.year === rainfall.year);
+		return {
+			...rainfall,
+			averageTemperature: temperature?.meanTemperature,
+			minTemperature: temperature?.minTemperature,
+			maxTemperature: temperature?.maxTemperature
+		};
+	});
+}
+
+/**
  * New Helper function to determine season from a date
  */
 export function getSeason(date: Date): Season {

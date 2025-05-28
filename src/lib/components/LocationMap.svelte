@@ -14,7 +14,10 @@
 		L = await import('leaflet');
 
 		// Initialize the map
-		map = L.map(mapContainer).setView([location.latitude, location.longitude], 11);
+		map = L.map(mapContainer, {
+			zoomControl: false,
+			scrollWheelZoom: false
+		}).setView([location.latitude, location.longitude], 10);
 
 		// Add OpenStreetMap tiles
 		L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -47,7 +50,7 @@
 
 	// Update map when location changes
 	$: if (map && L && location) {
-		map.setView([location.latitude, location.longitude], 11);
+		map.setView([location.latitude, location.longitude], 10);
 
 		// Clear existing markers and add new one
 		map.eachLayer((layer: any) => {
