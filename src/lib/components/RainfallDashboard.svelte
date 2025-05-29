@@ -1760,14 +1760,34 @@
 						>
 					</p>
 					<p class="text-xs text-gray-600">
-						<i class="fa-brands fa-bitcoin"></i> <strong>Bitcoin:</strong> 328fUT3qVNZJ8EbHGaZ3M1VvCzEbFGW39f
+						<i class="fa-brands fa-bitcoin"></i> <strong>Bitcoin:</strong>
+						<a
+							href="https://www.blockchain.com/btc/address/bc1qmpl0fpn35ya78z2evj794kc7uu8sd4x8n69640"
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							bc1qmpl0fpn35ya78z2evj794kc7uu8sd4x8n69640
+						</a>
 					</p>
 					<p class="text-xs text-gray-600">
 						<i class="fa-brands fa-ethereum"></i> <strong>Ethereum:</strong>
-						0xF63794858A90629f7366e4d2e5817e024c2Ae365
+						<a
+							href="https://etherscan.io/address/0xF63794858A90629f7366e4d2e5817e024c2Ae365"
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							0xF63794858A90629f7366e4d2e5817e024c2Ae365
+						</a>
 					</p>
 					<p class="text-xs text-gray-600">
-						<i class="fa-kit fa-solana"></i> <strong>Solana:</strong> 2zgoiSUhb8yo3eu35te9BcSQoa6wdVTmpi8AEHd49Jdj
+						<i class="fa-kit fa-solana"></i> <strong>Solana:</strong>
+						<a
+							href="https://explorer.solana.com/address/2zgoiSUhb8yo3eu35te9BcSQoa6wdVTmpi8AEHd49Jdj"
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							2zgoiSUhb8yo3eu35te9BcSQoa6wdVTmpi8AEHd49Jdj
+						</a>
 					</p>
 				</div>
 			</div>
