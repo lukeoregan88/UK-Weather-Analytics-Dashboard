@@ -40,6 +40,9 @@
 	let postcode = '';
 	let location: Location | null = null;
 	let loading = false;
+	let loadingData = false;
+	let loadingWeather = false;
+	let loadingCharts = false;
 	let error = '';
 	let historicalData: RainfallData[] = [];
 	let currentYearData: RainfallData[] = [];
@@ -76,6 +79,14 @@
 
 		loading = true;
 		error = '';
+		// Reset data to ensure clean state
+		location = null;
+		historicalData = [];
+		currentYearData = [];
+		recentData = [];
+		temperatureData = [];
+		currentWeather = null;
+		enhancedStats = null;
 
 		try {
 			location = await getLocationFromPostcode(postcode);
@@ -93,7 +104,16 @@
 	async function loadWeatherData() {
 		if (!location) return;
 
+		loadingData = true;
+		loadingWeather = true;
+		loadingCharts = true;
+
 		try {
+			// Load current weather first for immediate feedback
+			loadingWeather = true;
+			currentWeather = await getCurrentWeather(location.latitude, location.longitude);
+			loadingWeather = false;
+
 			// Load historical data (last 90 days)
 			historicalData = await getTenYearRainfallData(location.latitude, location.longitude);
 
@@ -110,8 +130,7 @@
 			temperatureStats = calculateTemperatureStats(temperatureData);
 			temperatureExtremes = calculateTemperatureExtremes(temperatureData.slice(-90));
 
-			// Get current weather
-			currentWeather = await getCurrentWeather(location.latitude, location.longitude);
+			loadingCharts = false;
 
 			// Calculate initial yearly comparisons for rainfall and temperature
 			const initialYearlyRainfallComparison = calculateYearlyComparison(historicalData);
@@ -127,8 +146,13 @@
 					initialYearlyTemperatureComparison
 				);
 			}
+
+			loadingData = false;
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load weather data';
+			loadingData = false;
+			loadingWeather = false;
+			loadingCharts = false;
 		}
 	}
 
@@ -333,6 +357,104 @@
 		</div>
 
 		{#if location}
+			<!-- Loading Overlay for Initial Data Load -->
+			{#if loading}
+				<div class="mb-4 rounded-lg bg-white p-6 shadow-sm">
+					<div class="text-center">
+						<div
+							class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600"
+						></div>
+						<h3 class="mb-2 text-lg font-semibold text-gray-900">Loading Weather Data</h3>
+						<p class="mb-4 text-sm text-gray-600">
+							Fetching historical and current weather information for {location.name}
+						</p>
+
+						<!-- Progress indicators -->
+						<div class="mx-auto max-w-md space-y-3">
+							<div class="flex items-center justify-between rounded-lg bg-gray-50 p-3">
+								<span class="text-sm font-medium text-gray-700">Location Data</span>
+								<div class="flex items-center text-green-600">
+									<svg class="mr-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+										<path
+											fill-rule="evenodd"
+											d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+											clip-rule="evenodd"
+										></path>
+									</svg>
+									<span class="text-xs font-medium">Complete</span>
+								</div>
+							</div>
+							<div class="flex items-center justify-between rounded-lg bg-gray-50 p-3">
+								<span class="text-sm font-medium text-gray-700">Current Weather</span>
+								{#if !loadingWeather}
+									<div class="flex items-center text-green-600">
+										<svg class="mr-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+											<path
+												fill-rule="evenodd"
+												d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+												clip-rule="evenodd"
+											></path>
+										</svg>
+										<span class="text-xs font-medium">Complete</span>
+									</div>
+								{:else}
+									<div class="flex items-center text-blue-600">
+										<div
+											class="mr-1 h-3 w-3 animate-spin rounded-full border border-blue-600 border-t-transparent"
+										></div>
+										<span class="text-xs font-medium">Loading...</span>
+									</div>
+								{/if}
+							</div>
+							<div class="flex items-center justify-between rounded-lg bg-gray-50 p-3">
+								<span class="text-sm font-medium text-gray-700">Historical Data</span>
+								{#if !loadingCharts}
+									<div class="flex items-center text-green-600">
+										<svg class="mr-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+											<path
+												fill-rule="evenodd"
+												d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+												clip-rule="evenodd"
+											></path>
+										</svg>
+										<span class="text-xs font-medium">Complete</span>
+									</div>
+								{:else}
+									<div class="flex items-center text-blue-600">
+										<div
+											class="mr-1 h-3 w-3 animate-spin rounded-full border border-blue-600 border-t-transparent"
+										></div>
+										<span class="text-xs font-medium">Loading...</span>
+									</div>
+								{/if}
+							</div>
+							<div class="flex items-center justify-between rounded-lg bg-gray-50 p-3">
+								<span class="text-sm font-medium text-gray-700">Analysis & Statistics</span>
+								{#if !loadingData}
+									<div class="flex items-center text-green-600">
+										<svg class="mr-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+											<path
+												fill-rule="evenodd"
+												d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+												clip-rule="evenodd"
+											></path>
+										</svg>
+										<span class="text-xs font-medium">Complete</span>
+									</div>
+								{:else}
+									<div class="flex items-center text-blue-600">
+										<div
+											class="mr-1 h-3 w-3 animate-spin rounded-full border border-blue-600 border-t-transparent"
+										></div>
+										<span class="text-xs font-medium">Processing...</span>
+									</div>
+								{/if}
+							</div>
+						</div>
+					</div>
+				</div>
+			{/if}
+
 			<!-- Location Info -->
 			<div class="mb-4 rounded-lg bg-white p-4 shadow-sm">
 				<div class="mb-3 flex items-center justify-between">
@@ -367,9 +489,21 @@
 			</div>
 
 			<!-- Current Weather -->
-			{#if currentWeather}
-				<div class="mb-4 rounded-lg bg-white p-4 shadow-sm">
-					<h2 class="mb-3 text-lg font-semibold text-gray-900">Current Conditions</h2>
+			<div class="mb-4 rounded-lg bg-white p-4 shadow-sm">
+				<h2 class="mb-3 text-lg font-semibold text-gray-900">Current Conditions</h2>
+
+				{#if loadingWeather}
+					<!-- Loading state for current weather -->
+					<div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+						{#each Array(4) as _, i}
+							<div class="rounded-lg bg-gray-50 p-3">
+								<div class="mb-2 h-4 w-20 animate-pulse rounded bg-gray-200"></div>
+								<div class="mb-1 h-6 w-16 animate-pulse rounded bg-gray-300"></div>
+								<div class="h-3 w-12 animate-pulse rounded bg-gray-200"></div>
+							</div>
+						{/each}
+					</div>
+				{:else if currentWeather}
 					<div class="grid grid-cols-2 gap-3 md:grid-cols-4">
 						<div class="rounded-lg bg-blue-50 p-3">
 							<h3 class="text-sm font-medium text-blue-900">Temperature</h3>
@@ -397,8 +531,17 @@
 							</p>
 						</div>
 					</div>
-				</div>
-			{/if}
+				{:else}
+					<div class="flex items-center justify-center py-8">
+						<div class="text-center">
+							<div
+								class="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"
+							></div>
+							<p class="mt-2 text-sm text-gray-500">Loading current weather...</p>
+						</div>
+					</div>
+				{/if}
+			</div>
 
 			<!-- Data View Toggle -->
 			<div class="mb-4 rounded-lg bg-white p-3 shadow-sm">
@@ -425,7 +568,16 @@
 
 			<!-- Key Statistics -->
 			<div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-				{#if !showTemperatureView}
+				{#if loadingData}
+					<!-- Loading state for statistics -->
+					{#each Array(4) as _, i}
+						<div class="rounded-lg bg-white p-4 shadow-sm">
+							<div class="mb-2 h-3 w-24 animate-pulse rounded bg-gray-200"></div>
+							<div class="mb-1 h-8 w-20 animate-pulse rounded bg-gray-300"></div>
+							<div class="h-3 w-16 animate-pulse rounded bg-gray-200"></div>
+						</div>
+					{/each}
+				{:else if !showTemperatureView}
 					<div class="rounded-lg bg-white p-4 shadow-sm">
 						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">
 							{currentYear} Total
@@ -500,7 +652,17 @@
 
 			<!-- Charts -->
 			<div class="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-				{#if !showTemperatureView}
+				{#if loadingCharts}
+					<!-- Loading state for charts -->
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<div class="mb-3 h-6 w-32 animate-pulse rounded bg-gray-200"></div>
+						<div class="h-64 w-full animate-pulse rounded bg-gray-100"></div>
+					</div>
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<div class="mb-3 h-6 w-40 animate-pulse rounded bg-gray-200"></div>
+						<div class="h-64 w-full animate-pulse rounded bg-gray-100"></div>
+					</div>
+				{:else if !showTemperatureView}
 					<!-- Recent Rainfall -->
 					<div class="rounded-lg bg-white p-4 shadow-sm">
 						<h3 class="mb-3 text-lg font-semibold text-gray-900">Last 30 Days</h3>
@@ -512,7 +674,14 @@
 								height={250}
 							/>
 						{:else}
-							<p class="text-gray-500">No recent data available</p>
+							<div class="flex items-center justify-center py-16">
+								<div class="text-center">
+									<div
+										class="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"
+									></div>
+									<p class="mt-2 text-sm text-gray-500">Loading chart data...</p>
+								</div>
+							</div>
 						{/if}
 					</div>
 
@@ -527,7 +696,14 @@
 								height={250}
 							/>
 						{:else}
-							<p class="text-gray-500">No current year data available</p>
+							<div class="flex items-center justify-center py-16">
+								<div class="text-center">
+									<div
+										class="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"
+									></div>
+									<p class="mt-2 text-sm text-gray-500">Loading chart data...</p>
+								</div>
+							</div>
 						{/if}
 					</div>
 				{:else}
@@ -545,7 +721,14 @@
 								showMinMax={true}
 							/>
 						{:else}
-							<p class="text-gray-500">No recent temperature data available</p>
+							<div class="flex items-center justify-center py-16">
+								<div class="text-center">
+									<div
+										class="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"
+									></div>
+									<p class="mt-2 text-sm text-gray-500">Loading temperature data...</p>
+								</div>
+							</div>
 						{/if}
 					</div>
 
@@ -564,14 +747,59 @@
 								showMinMax={false}
 							/>
 						{:else}
-							<p class="text-gray-500">No temperature data available</p>
+							<div class="flex items-center justify-center py-16">
+								<div class="text-center">
+									<div
+										class="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"
+									></div>
+									<p class="mt-2 text-sm text-gray-500">Loading temperature data...</p>
+								</div>
+							</div>
 						{/if}
 					</div>
 				{/if}
 			</div>
 
 			<!-- Yearly Comparison Cards -->
-			{#if displayedComparison.length > 0}
+			{#if loadingData}
+				<!-- Loading state for yearly comparison -->
+				<div class="mb-4 rounded-lg bg-white p-4 shadow-sm">
+					<div class="mb-4 flex items-center justify-between">
+						<div class="h-6 w-48 animate-pulse rounded bg-gray-200"></div>
+						<div class="h-5 w-32 animate-pulse rounded bg-gray-200"></div>
+					</div>
+
+					<div class="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+						{#each Array(8) as _, i}
+							<div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+								<div class="mb-2 h-4 w-12 animate-pulse rounded bg-gray-200"></div>
+								<div class="mb-2 h-8 w-20 animate-pulse rounded bg-gray-300"></div>
+								<div class="mb-3 h-1.5 w-full animate-pulse rounded bg-gray-200"></div>
+								<div class="grid grid-cols-2 gap-2">
+									<div class="h-12 animate-pulse rounded bg-gray-200"></div>
+									<div class="h-12 animate-pulse rounded bg-gray-200"></div>
+								</div>
+								<div class="mt-3 flex justify-center">
+									<div class="h-6 w-16 animate-pulse rounded-full bg-gray-200"></div>
+								</div>
+							</div>
+						{/each}
+					</div>
+
+					<!-- Loading summary stats -->
+					<div class="mt-4 rounded-lg bg-gray-50 p-3">
+						<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+							{#each Array(3) as _}
+								<div class="text-center">
+									<div class="mx-auto mb-1 h-4 w-24 animate-pulse rounded bg-gray-200"></div>
+									<div class="mx-auto mb-1 h-6 w-16 animate-pulse rounded bg-gray-300"></div>
+									<div class="mx-auto h-3 w-12 animate-pulse rounded bg-gray-200"></div>
+								</div>
+							{/each}
+						</div>
+					</div>
+				</div>
+			{:else if displayedComparison.length > 0}
 				<div class="mb-4 rounded-lg bg-white p-4 shadow-sm">
 					<div class="mb-4 flex items-center justify-between">
 						<h3 class="text-lg font-semibold text-gray-900">
@@ -1119,7 +1347,56 @@
 			{/if}
 
 			<!-- Enhanced Statistics Section -->
-			{#if enhancedStats}
+			{#if loadingData}
+				<!-- Loading state for enhanced statistics -->
+				<div class="mt-8">
+					<div class="mb-6 h-8 w-64 animate-pulse rounded bg-gray-200"></div>
+
+					<!-- Loading trends -->
+					<div class="mb-6 rounded-lg bg-white p-4 shadow-sm">
+						<div class="mb-4 h-6 w-48 animate-pulse rounded bg-gray-200"></div>
+						<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+							<div class="rounded-lg bg-blue-50 p-4">
+								<div class="mb-2 h-4 w-32 animate-pulse rounded bg-blue-200"></div>
+								<div class="mb-2 h-8 w-24 animate-pulse rounded bg-blue-300"></div>
+								<div class="h-3 w-40 animate-pulse rounded bg-blue-200"></div>
+							</div>
+							<div class="rounded-lg bg-orange-50 p-4">
+								<div class="mb-2 h-4 w-32 animate-pulse rounded bg-orange-200"></div>
+								<div class="mb-2 h-8 w-24 animate-pulse rounded bg-orange-300"></div>
+								<div class="h-3 w-40 animate-pulse rounded bg-orange-200"></div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Loading seasonal analysis -->
+					<div class="mb-6 rounded-lg bg-white p-6 shadow-sm">
+						<div class="mb-6 flex items-center">
+							<div class="mr-3 h-10 w-10 animate-pulse rounded-full bg-gray-300"></div>
+							<div>
+								<div class="mb-1 h-6 w-40 animate-pulse rounded bg-gray-200"></div>
+								<div class="h-4 w-56 animate-pulse rounded bg-gray-200"></div>
+							</div>
+						</div>
+						<div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+							{#each Array(4) as _}
+								<div class="rounded-xl border border-gray-200 bg-gray-50 p-6">
+									<div class="mb-4 flex items-center justify-between">
+										<div class="flex items-center">
+											<div class="mr-3 h-12 w-12 animate-pulse rounded-full bg-gray-300"></div>
+											<div>
+												<div class="mb-1 h-6 w-20 animate-pulse rounded bg-gray-200"></div>
+												<div class="h-4 w-32 animate-pulse rounded bg-gray-200"></div>
+											</div>
+										</div>
+									</div>
+									<div class="h-20 animate-pulse rounded bg-gray-200"></div>
+								</div>
+							{/each}
+						</div>
+					</div>
+				</div>
+			{:else if enhancedStats}
 				<div class="mt-8">
 					<h2 class="mb-6 text-2xl font-semibold text-gray-900">Enhanced Analysis</h2>
 
@@ -1476,23 +1753,23 @@
 						>
 						-
 					</p>
+					<h4 class="mt-4 mb-2 text-sm font-semibold text-gray-700">Support My Project</h4>
+					<p class="text-xs text-gray-600">
+						<a href="https://buymeacoffee.com/lukeoregan" target="_blank" rel="noopener noreferrer"
+							><strong>Buy me a coffee</strong> - buymeacoffee.com/lukeoregan</a
+						>
+					</p>
+					<p class="text-xs text-gray-600">
+						<i class="fa-brands fa-bitcoin"></i> <strong>Bitcoin:</strong> 328fUT3qVNZJ8EbHGaZ3M1VvCzEbFGW39f
+					</p>
+					<p class="text-xs text-gray-600">
+						<i class="fa-brands fa-ethereum"></i> <strong>Ethereum:</strong>
+						0xF63794858A90629f7366e4d2e5817e024c2Ae365
+					</p>
+					<p class="text-xs text-gray-600">
+						<i class="fa-kit fa-solana"></i> <strong>Solana:</strong> 2zgoiSUhb8yo3eu35te9BcSQoa6wdVTmpi8AEHd49Jdj
+					</p>
 				</div>
-				<h4 class="mt-4 mb-2 text-sm font-semibold text-gray-700">Support My Project</h4>
-				<p class="text-xs text-gray-600">
-					<a href="https://buymeacoffee.com/lukeoregan" target="_blank" rel="noopener noreferrer"
-						><strong>Buy me a coffee</strong> - buymeacoffee.com/lukeoregan</a
-					>
-				</p>
-				<p class="text-xs text-gray-600">
-					<i class="fa-brands fa-bitcoin"></i> <strong>Bitcoin:</strong> 328fUT3qVNZJ8EbHGaZ3M1VvCzEbFGW39f
-				</p>
-				<p class="text-xs text-gray-600">
-					<i class="fa-brands fa-ethereum"></i> <strong>Ethereum:</strong>
-					0xF63794858A90629f7366e4d2e5817e024c2Ae365
-				</p>
-				<p class="text-xs text-gray-600">
-					<strong>Solana:</strong> 2zgoiSUhb8yo3eu35te9BcSQoa6wdVTmpi8AEHd49Jdj
-				</p>
 			</div>
 		</div>
 	</div>
