@@ -3,7 +3,8 @@ import type {
 	WeatherApiResponse,
 	PostcodeApiResponse,
 	RainfallData,
-	TemperatureData
+	TemperatureData,
+	WindData
 } from '../types.js';
 import { format } from 'date-fns';
 import { cacheService } from './cacheService.js';
@@ -59,7 +60,7 @@ export async function getHistoricalRainfall(
 	url.searchParams.set('end_date', end);
 	url.searchParams.set(
 		'daily',
-		'precipitation_sum,temperature_2m_mean,temperature_2m_min,temperature_2m_max'
+		'precipitation_sum,temperature_2m_mean,temperature_2m_min,temperature_2m_max,wind_speed_10m_mean,wind_direction_10m_dominant,wind_gusts_10m_max'
 	);
 	url.searchParams.set('timezone', 'Europe/London');
 
@@ -106,8 +107,14 @@ export async function getCurrentWeather(latitude: number, longitude: number) {
 	const url = new URL('https://api.open-meteo.com/v1/forecast');
 	url.searchParams.set('latitude', latitude.toString());
 	url.searchParams.set('longitude', longitude.toString());
-	url.searchParams.set('current', 'temperature_2m,relative_humidity_2m,precipitation');
-	url.searchParams.set('daily', 'precipitation_sum,temperature_2m_min,temperature_2m_max');
+	url.searchParams.set(
+		'current',
+		'temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m,wind_gusts_10m'
+	);
+	url.searchParams.set(
+		'daily',
+		'precipitation_sum,temperature_2m_min,temperature_2m_max,wind_speed_10m_max,wind_gusts_10m_max'
+	);
 	url.searchParams.set('timezone', 'Europe/London');
 	url.searchParams.set('forecast_days', '1');
 
@@ -216,4 +223,67 @@ export async function getTenYearTemperatureData(
 	cacheService.set(latitude, longitude, 'temperature_historical', temperatureData);
 
 	return temperatureData;
+}
+
+/**
+ * Get wind data for the last 10 years
+ */
+export async function getTenYearWindData(latitude: number, longitude: number): Promise<WindData[]> {
+	// Check cache first
+	const cached = cacheService.get<WindData[]>(latitude, longitude, 'wind_historical');
+	if (cached) {
+		return cached;
+	}
+
+	const currentYear = new Date().getFullYear();
+	const startDate = new Date(currentYear - 10, 0, 1);
+	const endDate = new Date();
+
+	const start = format(startDate, 'yyyy-MM-dd');
+	const end = format(endDate, 'yyyy-MM-dd');
+
+	const url = new URL('https://archive-api.open-meteo.com/v1/archive');
+	url.searchParams.set('latitude', latitude.toString());
+	url.searchParams.set('longitude', longitude.toString());
+	url.searchParams.set('start_date', start);
+	url.searchParams.set('end_date', end);
+	url.searchParams.set(
+		'daily',
+		'wind_speed_10m_mean,wind_direction_10m_dominant,wind_gusts_10m_max'
+	);
+	url.searchParams.set('timezone', 'Europe/London');
+
+	try {
+		console.log('Fetching wind data from:', url.toString());
+		const response = await fetch(url.toString());
+
+		if (!response.ok) {
+			const errorText = await response.text();
+			console.error('Wind API error:', response.status, errorText);
+			throw new Error(`Wind API error: ${response.status} - ${errorText}`);
+		}
+
+		const data: WeatherApiResponse = await response.json();
+
+		if (!data.daily || !data.daily.time) {
+			throw new Error('Invalid response format from wind API');
+		}
+
+		const windData: WindData[] = data.daily.time
+			.map((date, index) => ({
+				date,
+				windSpeed: data.daily.wind_speed_10m_mean?.[index] || 0,
+				windDirection: data.daily.wind_direction_10m_dominant?.[index] || 0,
+				windGusts: data.daily.wind_gusts_10m_max?.[index] || 0
+			}))
+			.filter((d) => d.windSpeed !== null && d.windDirection !== null && d.windGusts !== null);
+
+		// Cache the result
+		cacheService.set(latitude, longitude, 'wind_historical', windData);
+
+		return windData;
+	} catch (error) {
+		console.error('Wind API fetch error:', error);
+		throw new Error(`Failed to fetch wind data: ${error}`);
+	}
 }

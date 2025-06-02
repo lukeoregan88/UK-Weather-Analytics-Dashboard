@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import RainfallChart from './RainfallChart.svelte';
 	import TemperatureChart from './TemperatureChart.svelte';
+	import WindChart from './WindChart.svelte';
 	import LocationMap from './LocationMap.svelte';
 	import YearlyComparisonPanel from './panels/YearlyComparisonPanel.svelte';
 	import EnhancedStatisticsPanel from './panels/EnhancedStatisticsPanel.svelte';
@@ -12,6 +13,10 @@
 		TemperatureData,
 		TemperatureStats,
 		TemperatureComparison,
+		WindData,
+		WindStats,
+		WindComparison,
+		WindExtremes,
 		EnhancedStatistics
 	} from '../types.js';
 	import {
@@ -19,7 +24,8 @@
 		getTenYearRainfallData,
 		getCurrentYearRainfall,
 		getCurrentWeather,
-		getTenYearTemperatureData
+		getTenYearTemperatureData,
+		getTenYearWindData
 	} from '../services/weatherApi.js';
 	import {
 		calculateYearlyComparison,
@@ -34,7 +40,12 @@
 		calculateTemperatureExtremes,
 		calculateEnhancedYearlyComparison,
 		calculateEnhancedMonthlyComparison,
-		calculateAllEnhancedStatistics
+		calculateAllEnhancedStatistics,
+		calculateWindStats,
+		calculateYearlyWindComparison,
+		calculateMonthlyWindComparison,
+		getRecentWind,
+		calculateWindExtremes
 	} from '../utils/dataProcessing.js';
 	import { format } from 'date-fns';
 	import { cacheService, postcodeStorage } from '../services/cacheService.js';
@@ -69,7 +80,19 @@
 		heatWaves: [],
 		coldSnaps: []
 	};
+
+	// Wind data
+	let windData: WindData[] = [];
+	let recentWindData: WindData[] = [];
+	let windStats: WindStats | null = null;
+	let windComparison: WindComparison[] = [];
+	let windExtremes: WindExtremes = {
+		strongestWinds: [],
+		calmPeriods: []
+	};
+
 	let showTemperatureView = false;
+	let showWindView = false;
 	let enhancedStats: EnhancedStatistics | null = null;
 
 	async function searchLocation() {
@@ -86,6 +109,7 @@
 		currentYearData = [];
 		recentData = [];
 		temperatureData = [];
+		windData = [];
 		currentWeather = null;
 		enhancedStats = null;
 
@@ -131,20 +155,29 @@
 			temperatureStats = calculateTemperatureStats(temperatureData);
 			temperatureExtremes = calculateTemperatureExtremes(temperatureData.slice(-90));
 
+			// Load wind data
+			windData = await getTenYearWindData(location.latitude, location.longitude);
+			recentWindData = getRecentWind(windData, 30);
+			windStats = calculateWindStats(windData);
+			windExtremes = calculateWindExtremes(windData.slice(-90));
+
 			loadingCharts = false;
 
-			// Calculate initial yearly comparisons for rainfall and temperature
+			// Calculate initial yearly comparisons for rainfall, temperature, and wind
 			const initialYearlyRainfallComparison = calculateYearlyComparison(historicalData);
 			const initialYearlyTemperatureComparison =
 				calculateYearlyTemperatureComparison(temperatureData);
+			const initialYearlyWindComparison = calculateYearlyWindComparison(windData);
 
 			// Calculate enhanced statistics
 			if (historicalData.length > 0 && temperatureData.length > 0) {
 				enhancedStats = calculateAllEnhancedStatistics(
 					historicalData,
 					temperatureData,
+					windData,
 					initialYearlyRainfallComparison,
-					initialYearlyTemperatureComparison
+					initialYearlyTemperatureComparison,
+					initialYearlyWindComparison
 				);
 			}
 
@@ -269,6 +302,48 @@
 
 	function handleMonthChanged(event: CustomEvent<{ month: number }>) {
 		selectedMonth = event.detail.month;
+	}
+
+	$: windComparison =
+		windData.length > 0
+			? showMonthlyComparison
+				? calculateMonthlyWindComparison(windData, selectedMonth)
+				: calculateYearlyWindComparison(windData)
+			: [];
+	$: averageWindSpeed =
+		windComparison.length > 0
+			? windComparison.reduce((sum, year) => sum + year.meanWindSpeed, 0) / windComparison.length
+			: 0;
+	$: windiestYear =
+		windComparison.length > 0
+			? windComparison.reduce((max, year) => (year.maxGusts > max.maxGusts ? year : max))
+			: null;
+	$: calmestYear =
+		windComparison.length > 0
+			? windComparison.reduce((min, year) => (year.meanWindSpeed < min.meanWindSpeed ? year : min))
+			: null;
+
+	function getWindDirectionLabel(degrees: number): string {
+		const directions = [
+			'N',
+			'NNE',
+			'NE',
+			'ENE',
+			'E',
+			'ESE',
+			'SE',
+			'SSE',
+			'S',
+			'SSW',
+			'SW',
+			'WSW',
+			'W',
+			'WNW',
+			'NW',
+			'NNW'
+		];
+		const index = Math.round(degrees / 22.5) % 16;
+		return directions[index];
 	}
 </script>
 
@@ -513,8 +588,8 @@
 
 				{#if loadingWeather}
 					<!-- Loading state for current weather -->
-					<div class="grid grid-cols-2 gap-3 md:grid-cols-4">
-						{#each Array(4) as _, i}
+					<div class="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
+						{#each Array(6) as _, i}
 							<div class="rounded-lg bg-gray-50 p-3">
 								<div class="mb-2 h-4 w-20 animate-pulse rounded bg-gray-200"></div>
 								<div class="mb-1 h-6 w-16 animate-pulse rounded bg-gray-300"></div>
@@ -523,7 +598,7 @@
 						{/each}
 					</div>
 				{:else if currentWeather}
-					<div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+					<div class="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
 						<div class="rounded-lg bg-blue-50 p-3">
 							<h3 class="text-sm font-medium text-blue-900">Temperature</h3>
 							<p class="text-xl font-bold text-blue-700">
@@ -549,6 +624,23 @@
 								{currentWeather.daily?.precipitation_sum?.[0]?.toFixed(1) || '0.0'} mm
 							</p>
 						</div>
+						<div class="rounded-lg bg-cyan-50 p-3">
+							<h3 class="text-sm font-medium text-cyan-900">Wind Speed</h3>
+							<p class="text-xl font-bold text-cyan-700">
+								{currentWeather.current?.wind_speed_10m?.toFixed(1) || 'N/A'} km/h
+							</p>
+						</div>
+						<div class="rounded-lg bg-indigo-50 p-3">
+							<h3 class="text-sm font-medium text-indigo-900">Wind Direction</h3>
+							<p class="text-lg font-bold text-indigo-700">
+								{currentWeather.current?.wind_direction_10m
+									? getWindDirectionLabel(currentWeather.current.wind_direction_10m)
+									: 'N/A'}
+							</p>
+							<p class="text-xs text-indigo-600">
+								{currentWeather.current?.wind_direction_10m?.toFixed(0) || 'N/A'}°
+							</p>
+						</div>
 					</div>
 				{:else}
 					<div class="flex items-center justify-center py-8">
@@ -563,24 +655,46 @@
 			</div>
 
 			<!-- Data View Toggle -->
-			<div class="mb-4 rounded-lg bg-white p-3 shadow-sm">
+			<div class="mb-4 rounded-lg bg-white p-4 shadow-sm">
 				<div class="flex items-center justify-center">
-					<div class="flex items-center space-x-3">
-						<span class="text-sm font-medium text-gray-700">Rainfall Analysis</span>
+					<div class="flex items-center space-x-4">
 						<button
-							on:click={() => (showTemperatureView = !showTemperatureView)}
-							aria-label="Toggle temperature view"
-							class="relative inline-flex h-5 w-9 items-center rounded-full bg-gray-200 transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none {showTemperatureView
-								? 'bg-blue-600'
-								: 'bg-gray-200'}"
+							on:click={() => {
+								showTemperatureView = false;
+								showWindView = false;
+							}}
+							class="rounded-lg px-4 py-2 text-sm font-medium transition-colors {!showTemperatureView &&
+							!showWindView
+								? 'bg-blue-600 text-white'
+								: 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
 						>
-							<span
-								class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform {showTemperatureView
-									? 'translate-x-5'
-									: 'translate-x-1'}"
-							></span>
+							<i class="fa-solid fa-cloud-rain mr-2"></i>
+							Rainfall Analysis
 						</button>
-						<span class="text-sm font-medium text-gray-700">Temperature Analysis</span>
+						<button
+							on:click={() => {
+								showTemperatureView = true;
+								showWindView = false;
+							}}
+							class="rounded-lg px-4 py-2 text-sm font-medium transition-colors {showTemperatureView
+								? 'bg-red-600 text-white'
+								: 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
+						>
+							<i class="fa-solid fa-thermometer-half mr-2"></i>
+							Temperature Analysis
+						</button>
+						<button
+							on:click={() => {
+								showTemperatureView = false;
+								showWindView = true;
+							}}
+							class="rounded-lg px-4 py-2 text-sm font-medium transition-colors {showWindView
+								? 'bg-cyan-600 text-white'
+								: 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
+						>
+							<i class="fa-solid fa-wind mr-2"></i>
+							Wind Analysis
+						</button>
 					</div>
 				</div>
 			</div>
@@ -596,39 +710,43 @@
 							<div class="h-3 w-16 animate-pulse rounded bg-gray-200"></div>
 						</div>
 					{/each}
-				{:else if !showTemperatureView}
+				{:else if showWindView && windStats}
 					<div class="rounded-lg bg-white p-4 shadow-sm">
 						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">
-							{currentYear} Total
+							Average Wind Speed
 						</h3>
-						<p class="mt-1 text-2xl font-bold text-gray-900">{currentYearTotal.toFixed(1)} mm</p>
-						<p class="text-xs text-gray-600">Year to date</p>
+						<p class="mt-1 text-2xl font-bold text-gray-900">
+							{windStats.meanSpeed.toFixed(1)} km/h
+						</p>
+						<p class="text-xs text-gray-600">Historical mean</p>
 					</div>
-
-					<div class="rounded-lg bg-white p-4 shadow-sm">
-						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">90-Day Total</h3>
-						<p class="mt-1 text-2xl font-bold text-gray-900">{last90DaysTotal.toFixed(1)} mm</p>
-						<p class="text-xs text-gray-600">Last 90 days</p>
-					</div>
-
-					{#if percentiles}
-						<div class="rounded-lg bg-white p-4 shadow-sm">
-							<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">
-								Median Daily Rain
-							</h3>
-							<p class="mt-1 text-2xl font-bold text-gray-900">{percentiles.p50} mm</p>
-							<p class="text-xs text-gray-600">When it rains</p>
-						</div>
-					{/if}
 
 					<div class="rounded-lg bg-white p-4 shadow-sm">
 						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">
-							Drought Periods
+							Max Wind Speed
 						</h3>
-						<p class="mt-1 text-2xl font-bold text-gray-900">{droughtPeriods.length}</p>
-						<p class="text-xs text-gray-600">7+ day dry spells (90 days)</p>
+						<p class="mt-1 text-2xl font-bold text-gray-900">
+							{windStats.maxSpeed.toFixed(1)} km/h
+						</p>
+						<p class="text-xs text-gray-600">Recorded maximum</p>
 					</div>
-				{:else if temperatureStats}
+
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">Gusty Days</h3>
+						<p class="mt-1 text-2xl font-bold text-gray-900">{windStats.gustyDays}</p>
+						<p class="text-xs text-gray-600">Gusts > 50 km/h</p>
+					</div>
+
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">
+							Prevailing Direction
+						</h3>
+						<p class="mt-1 text-2xl font-bold text-gray-900">
+							{getWindDirectionLabel(windStats.prevailingDirection)}
+						</p>
+						<p class="text-xs text-gray-600">{windStats.prevailingDirection}°</p>
+					</div>
+				{:else if showTemperatureView && temperatureStats}
 					<div class="rounded-lg bg-white p-4 shadow-sm">
 						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">
 							Average Temperature
@@ -666,6 +784,38 @@
 						</p>
 						<p class="text-xs text-gray-600">3+ days below -2°C (90 days)</p>
 					</div>
+				{:else}
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">
+							{currentYear} Total
+						</h3>
+						<p class="mt-1 text-2xl font-bold text-gray-900">{currentYearTotal.toFixed(1)} mm</p>
+						<p class="text-xs text-gray-600">Year to date</p>
+					</div>
+
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">90-Day Total</h3>
+						<p class="mt-1 text-2xl font-bold text-gray-900">{last90DaysTotal.toFixed(1)} mm</p>
+						<p class="text-xs text-gray-600">Last 90 days</p>
+					</div>
+
+					{#if percentiles}
+						<div class="rounded-lg bg-white p-4 shadow-sm">
+							<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">
+								Median Daily Rain
+							</h3>
+							<p class="mt-1 text-2xl font-bold text-gray-900">{percentiles.p50} mm</p>
+							<p class="text-xs text-gray-600">When it rains</p>
+						</div>
+					{/if}
+
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">
+							Drought Periods
+						</h3>
+						<p class="mt-1 text-2xl font-bold text-gray-900">{droughtPeriods.length}</p>
+						<p class="text-xs text-gray-600">7+ day dry spells (90 days)</p>
+					</div>
 				{/if}
 			</div>
 
@@ -681,16 +831,18 @@
 						<div class="mb-3 h-6 w-40 animate-pulse rounded bg-gray-200"></div>
 						<div class="h-64 w-full animate-pulse rounded bg-gray-100"></div>
 					</div>
-				{:else if !showTemperatureView}
-					<!-- Recent Rainfall -->
+				{:else if showWindView}
+					<!-- Recent Wind Data -->
 					<div class="rounded-lg bg-white p-4 shadow-sm">
-						<h3 class="mb-3 text-lg font-semibold text-gray-900">Last 30 Days</h3>
-						{#if recentData.length > 0}
-							<RainfallChart
-								data={recentData}
-								title="Daily Rainfall (Last 30 Days)"
-								type="bar"
+						<h3 class="mb-3 text-lg font-semibold text-gray-900">Wind Patterns (Last 30 Days)</h3>
+						{#if recentWindData.length > 0}
+							<WindChart
+								data={recentWindData}
+								title="Daily Wind Speed & Gusts (Last 30 Days)"
+								type="line"
 								height={250}
+								showDirection={false}
+								showGusts={true}
 							/>
 						{:else}
 							<div class="flex items-center justify-center py-16">
@@ -698,21 +850,23 @@
 									<div
 										class="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"
 									></div>
-									<p class="mt-2 text-sm text-gray-500">Loading chart data...</p>
+									<p class="mt-2 text-sm text-gray-500">Loading wind data...</p>
 								</div>
 							</div>
 						{/if}
 					</div>
 
-					<!-- Current Year vs Historical -->
+					<!-- Wind Direction Distribution -->
 					<div class="rounded-lg bg-white p-4 shadow-sm">
-						<h3 class="mb-3 text-lg font-semibold text-gray-900">Current Year Trend</h3>
-						{#if currentYearData.length > 0}
-							<RainfallChart
-								data={currentYearData}
-								title="{currentYear} Daily Rainfall"
-								type="line"
+						<h3 class="mb-3 text-lg font-semibold text-gray-900">Wind Direction Distribution</h3>
+						{#if recentWindData.length > 0}
+							<WindChart
+								data={recentWindData}
+								title="Wind Direction Frequency (Last 30 Days)"
+								type="polar"
 								height={250}
+								showDirection={true}
+								showGusts={false}
 							/>
 						{:else}
 							<div class="flex items-center justify-center py-16">
@@ -720,12 +874,12 @@
 									<div
 										class="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"
 									></div>
-									<p class="mt-2 text-sm text-gray-500">Loading chart data...</p>
+									<p class="mt-2 text-sm text-gray-500">Loading wind data...</p>
 								</div>
 							</div>
 						{/if}
 					</div>
-				{:else}
+				{:else if showTemperatureView}
 					<!-- Recent Temperature -->
 					<div class="rounded-lg bg-white p-4 shadow-sm">
 						<h3 class="mb-3 text-lg font-semibold text-gray-900">
@@ -776,6 +930,50 @@
 							</div>
 						{/if}
 					</div>
+				{:else}
+					<!-- Recent Rainfall -->
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="mb-3 text-lg font-semibold text-gray-900">Last 30 Days</h3>
+						{#if recentData.length > 0}
+							<RainfallChart
+								data={recentData}
+								title="Daily Rainfall (Last 30 Days)"
+								type="bar"
+								height={250}
+							/>
+						{:else}
+							<div class="flex items-center justify-center py-16">
+								<div class="text-center">
+									<div
+										class="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"
+									></div>
+									<p class="mt-2 text-sm text-gray-500">Loading chart data...</p>
+								</div>
+							</div>
+						{/if}
+					</div>
+
+					<!-- Current Year vs Historical -->
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="mb-3 text-lg font-semibold text-gray-900">Current Year Trend</h3>
+						{#if currentYearData.length > 0}
+							<RainfallChart
+								data={currentYearData}
+								title="{currentYear} Daily Rainfall"
+								type="line"
+								height={250}
+							/>
+						{:else}
+							<div class="flex items-center justify-center py-16">
+								<div class="text-center">
+									<div
+										class="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"
+									></div>
+									<p class="mt-2 text-sm text-gray-500">Loading chart data...</p>
+								</div>
+							</div>
+						{/if}
+					</div>
 				{/if}
 			</div>
 
@@ -794,8 +992,172 @@
 				on:monthChanged={handleMonthChanged}
 			/>
 
-			<!-- Drought Analysis / Temperature Extremes -->
-			{#if !showTemperatureView}
+			<!-- Drought Analysis / Temperature Extremes / Wind Extremes -->
+			{#if showWindView}
+				{#if windExtremes.strongestWinds.length > 0 || windExtremes.calmPeriods.length > 0}
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<div class="mb-4 flex items-center">
+							<div class="mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-cyan-100">
+								<svg
+									class="h-5 w-5 text-cyan-600"
+									fill="none"
+									stroke="currentColor"
+									viewBox="0 0 24 24"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M8 4l8 8-8 8"
+									></path>
+								</svg>
+							</div>
+							<div>
+								<h3 class="text-lg font-semibold text-gray-900">Wind Pattern Analysis</h3>
+								<p class="text-xs text-gray-600">Notable wind events (last 90 days)</p>
+							</div>
+						</div>
+
+						<!-- Strong Wind Periods -->
+						{#if windExtremes.strongestWinds.length > 0}
+							<div class="mb-4">
+								<h4 class="text-md mb-2 font-medium text-gray-900">
+									Strong Wind Periods (3+ days with gusts > 60 km/h)
+								</h4>
+								<div class="grid gap-3 sm:grid-cols-1 lg:grid-cols-2">
+									{#each windExtremes.strongestWinds.slice(0, 4) as windEvent, index}
+										<div
+											class="group relative overflow-hidden rounded-lg border border-cyan-200 bg-gradient-to-r from-cyan-50 to-blue-50 p-3 transition-all duration-200 hover:border-cyan-300 hover:shadow-md"
+										>
+											<div class="flex items-start justify-between">
+												<div class="flex-1">
+													<div class="mb-2 flex items-center">
+														<div
+															class="mr-2 flex h-6 w-6 items-center justify-center rounded-full bg-cyan-200 text-cyan-800"
+														>
+															<span class="text-xs font-bold">{index + 1}</span>
+														</div>
+														<div class="flex items-center text-cyan-700">
+															<svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+																<path
+																	fill-rule="evenodd"
+																	d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"
+																	clip-rule="evenodd"
+																></path>
+															</svg>
+															<span class="text-sm font-semibold">{windEvent.duration} days</span>
+														</div>
+													</div>
+													<p class="mb-1 text-xs font-medium text-gray-800">
+														Max gusts: {windEvent.maxGusts.toFixed(1)} km/h
+													</p>
+													<p class="mb-1 text-xs font-medium text-gray-800">
+														Max speed: {windEvent.maxSpeed.toFixed(1)} km/h
+													</p>
+													<div class="flex items-center text-xs text-gray-600">
+														<svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+															<path
+																fill-rule="evenodd"
+																d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z"
+																clip-rule="evenodd"
+															></path>
+														</svg>
+														<span>
+															{format(new Date(windEvent.start), 'dd MMM')} - {format(
+																new Date(windEvent.end),
+																'dd MMM yyyy'
+															)}
+														</span>
+													</div>
+												</div>
+												<div class="ml-2 flex flex-col items-end">
+													<div class="rounded-full bg-cyan-200 px-2 py-0.5">
+														<span class="text-xs font-medium text-cyan-800">
+															{windEvent.duration >= 7
+																? 'Severe'
+																: windEvent.duration >= 5
+																	? 'Strong'
+																	: 'Moderate'}
+														</span>
+													</div>
+												</div>
+											</div>
+										</div>
+									{/each}
+								</div>
+							</div>
+						{/if}
+
+						<!-- Calm Periods -->
+						{#if windExtremes.calmPeriods.length > 0}
+							<div class="mb-4">
+								<h4 class="text-md mb-2 font-medium text-gray-900">
+									Extended Calm Periods (5+ days with wind &lt; 10 km/h)
+								</h4>
+								<div class="grid gap-3 sm:grid-cols-1 lg:grid-cols-2">
+									{#each windExtremes.calmPeriods.slice(0, 4) as calmEvent, index}
+										<div
+											class="group relative overflow-hidden rounded-lg border border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 p-3 transition-all duration-200 hover:border-green-300 hover:shadow-md"
+										>
+											<div class="flex items-start justify-between">
+												<div class="flex-1">
+													<div class="mb-2 flex items-center">
+														<div
+															class="mr-2 flex h-6 w-6 items-center justify-center rounded-full bg-green-200 text-green-800"
+														>
+															<span class="text-xs font-bold">{index + 1}</span>
+														</div>
+														<div class="flex items-center text-green-700">
+															<span class="text-sm font-semibold">{calmEvent.duration} days</span>
+														</div>
+													</div>
+													<p class="mb-1 text-xs font-medium text-gray-800">
+														Average: {calmEvent.avgSpeed.toFixed(1)} km/h
+													</p>
+													<div class="flex items-center text-xs text-gray-600">
+														<span>
+															{format(new Date(calmEvent.start), 'dd MMM')} - {format(
+																new Date(calmEvent.end),
+																'dd MMM yyyy'
+															)}
+														</span>
+													</div>
+												</div>
+											</div>
+										</div>
+									{/each}
+								</div>
+							</div>
+						{/if}
+
+						{#if windExtremes.strongestWinds.length === 0 && windExtremes.calmPeriods.length === 0}
+							<div class="py-8 text-center">
+								<div
+									class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-100"
+								>
+									<svg
+										class="h-6 w-6 text-gray-600"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M5 13l4 4L19 7"
+										></path>
+									</svg>
+								</div>
+								<h4 class="mt-2 text-sm font-medium text-gray-900">No notable wind events</h4>
+								<p class="mt-1 text-sm text-gray-500">
+									No significant wind patterns in the last 90 days
+								</p>
+							</div>
+						{/if}
+					</div>
+				{/if}
+			{:else if !showTemperatureView}
 				{#if droughtPeriods.length > 0}
 					<div class="rounded-lg bg-white p-4 shadow-sm">
 						<div class="mb-4 flex items-center">
@@ -934,14 +1296,124 @@
 						{/if}
 					</div>
 				{/if}
-			{:else}
-				<!-- Temperature Extremes Analysis -->
-				{#if temperatureExtremes.heatWaves.length > 0 || temperatureExtremes.coldSnaps.length > 0}
-					<div class="rounded-lg bg-white p-4 shadow-sm">
-						<div class="mb-4 flex items-center">
-							<div class="mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-red-100">
+			{/if}
+
+			<!-- Temperature Extremes Analysis -->
+			{#if temperatureExtremes.heatWaves.length > 0 || temperatureExtremes.coldSnaps.length > 0}
+				<div class="rounded-lg bg-white p-4 shadow-sm">
+					<div class="mb-4 flex items-center">
+						<div class="mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-red-100">
+							<svg
+								class="h-5 w-5 text-red-600"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+								></path>
+							</svg>
+						</div>
+						<div>
+							<h3 class="text-lg font-semibold text-gray-900">Temperature Extremes</h3>
+							<p class="text-xs text-gray-600">Heat waves and cold snaps (last 90 days)</p>
+						</div>
+					</div>
+
+					<!-- Heat Waves -->
+					{#if temperatureExtremes.heatWaves.length > 0}
+						<div class="mb-4">
+							<h4 class="text-md mb-2 font-medium text-gray-900">
+								Heat Waves (3+ days above 25°C)
+							</h4>
+							<div class="grid gap-2 sm:grid-cols-1 lg:grid-cols-2">
+								{#each temperatureExtremes.heatWaves.slice(0, 4) as heatWave, index}
+									<div
+										class="group relative overflow-hidden rounded-lg border border-red-200 bg-gradient-to-r from-red-50 to-orange-50 p-2 transition-all duration-200 hover:border-red-300 hover:shadow-md"
+									>
+										<div class="flex items-start justify-between">
+											<div class="flex-1">
+												<div class="mb-1 flex items-center">
+													<div
+														class="mr-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-200 text-red-800"
+													>
+														<span class="text-xs font-bold">{index + 1}</span>
+													</div>
+													<div class="flex items-center text-red-700">
+														<span class="text-xs font-semibold">{heatWave.duration} days</span>
+													</div>
+												</div>
+												<p class="mb-1 text-xs font-medium text-gray-800">
+													Peak: {heatWave.maxTemp.toFixed(1)}°C
+												</p>
+												<div class="flex items-center text-xs text-gray-600">
+													<span>
+														{format(new Date(heatWave.start), 'dd MMM')} - {format(
+															new Date(heatWave.end),
+															'dd MMM yyyy'
+														)}
+													</span>
+												</div>
+											</div>
+										</div>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
+					<!-- Cold Snaps -->
+					{#if temperatureExtremes.coldSnaps.length > 0}
+						<div class="mb-4">
+							<h4 class="text-md mb-2 font-medium text-gray-900">
+								Cold Snaps (3+ days below -2°C)
+							</h4>
+							<div class="grid gap-2 sm:grid-cols-1 lg:grid-cols-2">
+								{#each temperatureExtremes.coldSnaps.slice(0, 4) as coldSnap, index}
+									<div
+										class="group relative overflow-hidden rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-cyan-50 p-2 transition-all duration-200 hover:border-blue-300 hover:shadow-md"
+									>
+										<div class="flex items-start justify-between">
+											<div class="flex-1">
+												<div class="mb-1 flex items-center">
+													<div
+														class="mr-2 flex h-5 w-5 items-center justify-center rounded-full bg-blue-200 text-blue-800"
+													>
+														<span class="text-xs font-bold">{index + 1}</span>
+													</div>
+													<div class="flex items-center text-blue-700">
+														<span class="text-xs font-semibold">{coldSnap.duration} days</span>
+													</div>
+												</div>
+												<p class="mb-1 text-sm font-medium text-gray-800">
+													Low: {coldSnap.minTemp.toFixed(1)}°C
+												</p>
+												<div class="flex items-center text-xs text-gray-600">
+													<span>
+														{format(new Date(coldSnap.start), 'dd MMM')} - {format(
+															new Date(coldSnap.end),
+															'dd MMM yyyy'
+														)}
+													</span>
+												</div>
+											</div>
+										</div>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
+					{#if temperatureExtremes.heatWaves.length === 0 && temperatureExtremes.coldSnaps.length === 0}
+						<div class="py-8 text-center">
+							<div
+								class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100"
+							>
 								<svg
-									class="h-5 w-5 text-red-600"
+									class="h-6 w-6 text-green-600"
 									fill="none"
 									stroke="currentColor"
 									viewBox="0 0 24 24"
@@ -950,129 +1422,17 @@
 										stroke-linecap="round"
 										stroke-linejoin="round"
 										stroke-width="2"
-										d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+										d="M5 13l4 4L19 7"
 									></path>
 								</svg>
 							</div>
-							<div>
-								<h3 class="text-lg font-semibold text-gray-900">Temperature Extremes</h3>
-								<p class="text-xs text-gray-600">Heat waves and cold snaps (last 90 days)</p>
-							</div>
+							<h4 class="mt-2 text-sm font-medium text-gray-900">No extreme temperature events</h4>
+							<p class="mt-1 text-sm text-gray-500">
+								No significant heat waves or cold snaps in the last 90 days
+							</p>
 						</div>
-
-						<!-- Heat Waves -->
-						{#if temperatureExtremes.heatWaves.length > 0}
-							<div class="mb-4">
-								<h4 class="text-md mb-2 font-medium text-gray-900">
-									Heat Waves (3+ days above 25°C)
-								</h4>
-								<div class="grid gap-2 sm:grid-cols-1 lg:grid-cols-2">
-									{#each temperatureExtremes.heatWaves.slice(0, 4) as heatWave, index}
-										<div
-											class="group relative overflow-hidden rounded-lg border border-red-200 bg-gradient-to-r from-red-50 to-orange-50 p-2 transition-all duration-200 hover:border-red-300 hover:shadow-md"
-										>
-											<div class="flex items-start justify-between">
-												<div class="flex-1">
-													<div class="mb-1 flex items-center">
-														<div
-															class="mr-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-200 text-red-800"
-														>
-															<span class="text-xs font-bold">{index + 1}</span>
-														</div>
-														<div class="flex items-center text-red-700">
-															<span class="text-xs font-semibold">{heatWave.duration} days</span>
-														</div>
-													</div>
-													<p class="mb-1 text-xs font-medium text-gray-800">
-														Peak: {heatWave.maxTemp.toFixed(1)}°C
-													</p>
-													<div class="flex items-center text-xs text-gray-600">
-														<span>
-															{format(new Date(heatWave.start), 'dd MMM')} - {format(
-																new Date(heatWave.end),
-																'dd MMM yyyy'
-															)}
-														</span>
-													</div>
-												</div>
-											</div>
-										</div>
-									{/each}
-								</div>
-							</div>
-						{/if}
-
-						<!-- Cold Snaps -->
-						{#if temperatureExtremes.coldSnaps.length > 0}
-							<div class="mb-4">
-								<h4 class="text-md mb-2 font-medium text-gray-900">
-									Cold Snaps (3+ days below -2°C)
-								</h4>
-								<div class="grid gap-2 sm:grid-cols-1 lg:grid-cols-2">
-									{#each temperatureExtremes.coldSnaps.slice(0, 4) as coldSnap, index}
-										<div
-											class="group relative overflow-hidden rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-cyan-50 p-2 transition-all duration-200 hover:border-blue-300 hover:shadow-md"
-										>
-											<div class="flex items-start justify-between">
-												<div class="flex-1">
-													<div class="mb-1 flex items-center">
-														<div
-															class="mr-2 flex h-5 w-5 items-center justify-center rounded-full bg-blue-200 text-blue-800"
-														>
-															<span class="text-xs font-bold">{index + 1}</span>
-														</div>
-														<div class="flex items-center text-blue-700">
-															<span class="text-xs font-semibold">{coldSnap.duration} days</span>
-														</div>
-													</div>
-													<p class="mb-1 text-sm font-medium text-gray-800">
-														Low: {coldSnap.minTemp.toFixed(1)}°C
-													</p>
-													<div class="flex items-center text-xs text-gray-600">
-														<span>
-															{format(new Date(coldSnap.start), 'dd MMM')} - {format(
-																new Date(coldSnap.end),
-																'dd MMM yyyy'
-															)}
-														</span>
-													</div>
-												</div>
-											</div>
-										</div>
-									{/each}
-								</div>
-							</div>
-						{/if}
-
-						{#if temperatureExtremes.heatWaves.length === 0 && temperatureExtremes.coldSnaps.length === 0}
-							<div class="py-8 text-center">
-								<div
-									class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100"
-								>
-									<svg
-										class="h-6 w-6 text-green-600"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M5 13l4 4L19 7"
-										></path>
-									</svg>
-								</div>
-								<h4 class="mt-2 text-sm font-medium text-gray-900">
-									No extreme temperature events
-								</h4>
-								<p class="mt-1 text-sm text-gray-500">
-									No significant heat waves or cold snaps in the last 90 days
-								</p>
-							</div>
-						{/if}
-					</div>
-				{/if}
+					{/if}
+				</div>
 			{/if}
 
 			<!-- Enhanced Statistics Section -->

@@ -83,6 +83,9 @@ export interface WeatherApiResponse {
 		temperature_2m_min?: number[];
 		temperature_2m_max?: number[];
 		relative_humidity_2m?: number[];
+		wind_speed_10m_mean?: number[];
+		wind_direction_10m_dominant?: number[];
+		wind_gusts_10m_max?: number[];
 	};
 }
 
@@ -119,11 +122,13 @@ export interface SeasonalTemperatureStat {
 }
 
 export interface ExtremeRainfallEvent extends RainfallData {
-	// Future: rank or other specific fields if needed
+	rank?: number; // Position in the ranking
+	percentile?: number; // Percentile within historical data
 }
 
 export interface ExtremeTemperatureEvent extends TemperatureData {
-	// Future: rank or other specific fields if needed
+	rank?: number; // Position in the ranking
+	percentile?: number; // Percentile within historical data
 }
 
 export interface Trend {
@@ -136,12 +141,77 @@ export interface Trend {
 export interface EnhancedStatistics {
 	seasonalRainfall: Partial<Record<Season, SeasonalRainfallStat[]>>;
 	seasonalTemperature: Partial<Record<Season, SeasonalTemperatureStat[]>>;
+	seasonalWind?: Partial<Record<Season, SeasonalWindStat[]>>;
 	topWettestDays: ExtremeRainfallEvent[];
-	topDryestDays?: ExtremeRainfallEvent[]; // Added for completeness
+	topDryestDays?: ExtremeRainfallEvent[];
 	topWettestMonths: MonthlyRainfall[];
-	topDryestMonths?: MonthlyRainfall[]; // Added for completeness
+	topDryestMonths?: MonthlyRainfall[];
 	topHottestDays: ExtremeTemperatureEvent[];
 	topColdestDays: ExtremeTemperatureEvent[];
+	topWindiestDays?: ExtremeWindEvent[];
+	topCalmestDays?: ExtremeWindEvent[];
 	rainfallTrend?: Trend;
 	temperatureTrend?: Trend;
+	windTrend?: Trend;
+}
+
+// New wind-specific types
+export interface WindData {
+	date: string;
+	windSpeed: number; // mean wind speed in km/h
+	windDirection: number; // wind direction in degrees (0-360)
+	windGusts: number; // maximum wind gusts in km/h
+}
+
+export interface WindStats {
+	meanSpeed: number;
+	maxSpeed: number;
+	maxGusts: number;
+	prevailingDirection: number; // most common direction
+	calmDays: number; // days with wind speed < 5 km/h
+	gustyDays: number; // days with gusts > 50 km/h
+}
+
+export interface WindComparison {
+	year: number;
+	meanWindSpeed: number;
+	maxWindSpeed: number;
+	maxGusts: number;
+	prevailingDirection: number;
+	calmDays: number;
+	gustyDays: number;
+	stormyDays: number; // days with sustained winds > 60 km/h
+}
+
+export interface WindExtremes {
+	strongestWinds: Array<{
+		start: string;
+		end: string;
+		duration: number;
+		maxSpeed: number;
+		maxGusts: number;
+	}>;
+	calmPeriods: Array<{
+		start: string;
+		end: string;
+		duration: number;
+		avgSpeed: number;
+	}>;
+}
+
+export interface SeasonalWindStat {
+	year: number;
+	season: Season;
+	meanWindSpeed: number;
+	maxWindSpeed: number;
+	maxGusts: number;
+	prevailingDirection: number;
+	calmDays: number;
+	gustyDays: number;
+}
+
+export interface ExtremeWindEvent extends WindData {
+	rank?: number; // Position in the ranking
+	percentile?: number; // Percentile within historical data
+	severity?: 'Light' | 'Moderate' | 'Strong' | 'Severe' | 'Extreme';
 }

@@ -11,8 +11,14 @@ import type {
 	SeasonalTemperatureStat,
 	ExtremeRainfallEvent,
 	ExtremeTemperatureEvent,
+	ExtremeWindEvent,
 	Trend,
-	EnhancedStatistics
+	EnhancedStatistics,
+	WindData,
+	WindStats,
+	WindComparison,
+	WindExtremes,
+	SeasonalWindStat
 } from '../types.js';
 import { format, getYear, parseISO, getMonth } from 'date-fns';
 
@@ -706,11 +712,15 @@ export function calculateTemperatureTrend(
 export function calculateAllEnhancedStatistics(
 	historicalRainfall: RainfallData[],
 	historicalTemperature: TemperatureData[],
+	historicalWind: WindData[],
 	yearlyRainfallComparison: YearlyComparison[],
-	yearlyTemperatureComparison: TemperatureComparison[]
+	yearlyTemperatureComparison: TemperatureComparison[],
+	yearlyWindComparison: WindComparison[]
 ): EnhancedStatistics {
 	const seasonalRainfall = calculateSeasonalRainfallStats(historicalRainfall);
 	const seasonalTemperature = calculateSeasonalTemperatureStats(historicalTemperature);
+	const seasonalWind =
+		historicalWind.length > 0 ? calculateSeasonalWindStats(historicalWind) : undefined;
 
 	const topWettestDays = getTopNEvents<RainfallData>(
 		historicalRainfall,
@@ -744,19 +754,423 @@ export function calculateAllEnhancedStatistics(
 		true // ascending for coldest
 	) as ExtremeTemperatureEvent[];
 
+	const topWindiestDays =
+		historicalWind.length > 0
+			? (getTopNEvents<WindData>(
+					historicalWind,
+					(d) => d.windGusts, // Use gusts for windiest
+					5,
+					false
+				) as ExtremeWindEvent[])
+			: undefined;
+
+	const topCalmestDays =
+		historicalWind.length > 0
+			? (getTopNEvents<WindData>(
+					historicalWind.filter((d) => d.windSpeed > 0), // Exclude completely calm days
+					(d) => d.windSpeed,
+					5,
+					true // ascending for calmest
+				) as ExtremeWindEvent[])
+			: undefined;
+
 	const rainfallTrend = calculateRainfallTrend(yearlyRainfallComparison);
 	const temperatureTrend = calculateTemperatureTrend(yearlyTemperatureComparison);
+	const windTrend =
+		yearlyWindComparison.length > 0 ? calculateWindTrend(yearlyWindComparison) : undefined;
 
 	return {
 		seasonalRainfall,
 		seasonalTemperature,
+		seasonalWind,
 		topWettestDays,
 		topDryestDays,
 		topWettestMonths,
 		topDryestMonths,
 		topHottestDays,
 		topColdestDays,
+		topWindiestDays,
+		topCalmestDays,
 		rainfallTrend,
-		temperatureTrend
+		temperatureTrend,
+		windTrend
+	};
+}
+
+/**
+ * Calculate wind statistics for a dataset
+ */
+export function calculateWindStats(data: WindData[]): WindStats {
+	if (data.length === 0) {
+		return {
+			meanSpeed: 0,
+			maxSpeed: 0,
+			maxGusts: 0,
+			prevailingDirection: 0,
+			calmDays: 0,
+			gustyDays: 0
+		};
+	}
+
+	const speeds = data.map((d) => d.windSpeed);
+	const gusts = data.map((d) => d.windGusts);
+
+	const meanSpeed = speeds.reduce((sum, speed) => sum + speed, 0) / speeds.length;
+	const maxSpeed = Math.max(...speeds);
+	const maxGusts = Math.max(...gusts);
+	const calmDays = data.filter((d) => d.windSpeed < 5).length; // Light air/calm
+	const gustyDays = data.filter((d) => d.windGusts > 50).length; // Gusty conditions
+
+	// Calculate prevailing direction (most common direction)
+	const directionCounts = new Array(16).fill(0);
+	data.forEach((d) => {
+		const index = Math.round(d.windDirection / 22.5) % 16;
+		directionCounts[index]++;
+	});
+	const prevailingIndex = directionCounts.indexOf(Math.max(...directionCounts));
+	const prevailingDirection = prevailingIndex * 22.5;
+
+	return {
+		meanSpeed: Math.round(meanSpeed * 10) / 10,
+		maxSpeed: Math.round(maxSpeed * 10) / 10,
+		maxGusts: Math.round(maxGusts * 10) / 10,
+		prevailingDirection: Math.round(prevailingDirection),
+		calmDays,
+		gustyDays
+	};
+}
+
+/**
+ * Calculate yearly wind comparison statistics
+ */
+export function calculateYearlyWindComparison(data: WindData[]): WindComparison[] {
+	const yearlyGroups = data.reduce(
+		(acc, item) => {
+			const year = getYear(parseISO(item.date));
+			if (!acc[year]) acc[year] = [];
+			acc[year].push(item);
+			return acc;
+		},
+		{} as Record<number, WindData[]>
+	);
+
+	return Object.entries(yearlyGroups)
+		.map(([year, yearData]) => {
+			const meanWindSpeed = yearData.reduce((sum, day) => sum + day.windSpeed, 0) / yearData.length;
+			const maxWindSpeed = Math.max(...yearData.map((d) => d.windSpeed));
+			const maxGusts = Math.max(...yearData.map((d) => d.windGusts));
+			const calmDays = yearData.filter((d) => d.windSpeed < 5).length;
+			const gustyDays = yearData.filter((d) => d.windGusts > 50).length;
+			const stormyDays = yearData.filter((d) => d.windSpeed > 60).length; // Strong winds
+
+			// Calculate prevailing direction
+			const directionCounts = new Array(16).fill(0);
+			yearData.forEach((d) => {
+				const index = Math.round(d.windDirection / 22.5) % 16;
+				directionCounts[index]++;
+			});
+			const prevailingIndex = directionCounts.indexOf(Math.max(...directionCounts));
+			const prevailingDirection = prevailingIndex * 22.5;
+
+			return {
+				year: parseInt(year),
+				meanWindSpeed: Math.round(meanWindSpeed * 10) / 10,
+				maxWindSpeed: Math.round(maxWindSpeed * 10) / 10,
+				maxGusts: Math.round(maxGusts * 10) / 10,
+				prevailingDirection: Math.round(prevailingDirection),
+				calmDays,
+				gustyDays,
+				stormyDays
+			};
+		})
+		.sort((a, b) => a.year - b.year);
+}
+
+/**
+ * Calculate monthly wind comparison for a specific month across years
+ */
+export function calculateMonthlyWindComparison(
+	data: WindData[],
+	targetMonth: number
+): WindComparison[] {
+	const yearlyGroups = data.reduce(
+		(acc, item) => {
+			const year = getYear(parseISO(item.date));
+			if (!acc[year]) acc[year] = [];
+			acc[year].push(item);
+			return acc;
+		},
+		{} as Record<number, WindData[]>
+	);
+
+	const results = Object.entries(yearlyGroups)
+		.map(([year, yearData]) => {
+			// Filter data for the target month
+			const monthData = yearData.filter((day) => {
+				const date = parseISO(day.date);
+				return getMonth(date) === targetMonth;
+			});
+
+			if (monthData.length === 0) {
+				return null;
+			}
+
+			const meanWindSpeed =
+				monthData.reduce((sum, day) => sum + day.windSpeed, 0) / monthData.length;
+			const maxWindSpeed = Math.max(...monthData.map((d) => d.windSpeed));
+			const maxGusts = Math.max(...monthData.map((d) => d.windGusts));
+			const calmDays = monthData.filter((d) => d.windSpeed < 5).length;
+			const gustyDays = monthData.filter((d) => d.windGusts > 50).length;
+			const stormyDays = monthData.filter((d) => d.windSpeed > 60).length;
+
+			// Calculate prevailing direction
+			const directionCounts = new Array(16).fill(0);
+			monthData.forEach((d) => {
+				const index = Math.round(d.windDirection / 22.5) % 16;
+				directionCounts[index]++;
+			});
+			const prevailingIndex = directionCounts.indexOf(Math.max(...directionCounts));
+			const prevailingDirection = prevailingIndex * 22.5;
+
+			return {
+				year: parseInt(year),
+				meanWindSpeed: Math.round(meanWindSpeed * 10) / 10,
+				maxWindSpeed: Math.round(maxWindSpeed * 10) / 10,
+				maxGusts: Math.round(maxGusts * 10) / 10,
+				prevailingDirection: Math.round(prevailingDirection),
+				calmDays,
+				gustyDays,
+				stormyDays
+			};
+		})
+		.filter((item): item is WindComparison => item !== null);
+
+	return results.sort((a, b) => a.year - b.year);
+}
+
+/**
+ * Get recent wind data
+ */
+export function getRecentWind(data: WindData[], days: number = 30): WindData[] {
+	return data.slice(-days);
+}
+
+/**
+ * Calculate wind extremes (strong wind periods and calm periods)
+ */
+export function calculateWindExtremes(data: WindData[]): WindExtremes {
+	const strongestWinds: Array<{
+		start: string;
+		end: string;
+		duration: number;
+		maxSpeed: number;
+		maxGusts: number;
+	}> = [];
+	const calmPeriods: Array<{
+		start: string;
+		end: string;
+		duration: number;
+		avgSpeed: number;
+	}> = [];
+
+	let strongWindStart: string | null = null;
+	let strongWindDuration = 0;
+	let strongWindMaxSpeed = 0;
+	let strongWindMaxGusts = 0;
+
+	let calmStart: string | null = null;
+	let calmDuration = 0;
+	let calmTotalSpeed = 0;
+
+	data.forEach((day, index) => {
+		// Strong wind detection (3+ consecutive days with gusts > 60 km/h)
+		if (day.windGusts > 60) {
+			if (strongWindStart === null) {
+				strongWindStart = day.date;
+				strongWindDuration = 1;
+				strongWindMaxSpeed = day.windSpeed;
+				strongWindMaxGusts = day.windGusts;
+			} else {
+				strongWindDuration++;
+				strongWindMaxSpeed = Math.max(strongWindMaxSpeed, day.windSpeed);
+				strongWindMaxGusts = Math.max(strongWindMaxGusts, day.windGusts);
+			}
+		} else {
+			if (strongWindStart !== null && strongWindDuration >= 3) {
+				strongestWinds.push({
+					start: strongWindStart,
+					end: index > 0 ? data[index - 1].date : day.date,
+					duration: strongWindDuration,
+					maxSpeed: strongWindMaxSpeed,
+					maxGusts: strongWindMaxGusts
+				});
+			}
+			strongWindStart = null;
+			strongWindDuration = 0;
+			strongWindMaxSpeed = 0;
+			strongWindMaxGusts = 0;
+		}
+
+		// Calm period detection (5+ consecutive days with wind speed < 10 km/h)
+		if (day.windSpeed < 10) {
+			if (calmStart === null) {
+				calmStart = day.date;
+				calmDuration = 1;
+				calmTotalSpeed = day.windSpeed;
+			} else {
+				calmDuration++;
+				calmTotalSpeed += day.windSpeed;
+			}
+		} else {
+			if (calmStart !== null && calmDuration >= 5) {
+				calmPeriods.push({
+					start: calmStart,
+					end: index > 0 ? data[index - 1].date : day.date,
+					duration: calmDuration,
+					avgSpeed: Math.round((calmTotalSpeed / calmDuration) * 10) / 10
+				});
+			}
+			calmStart = null;
+			calmDuration = 0;
+			calmTotalSpeed = 0;
+		}
+	});
+
+	// Handle ongoing extremes
+	if (strongWindStart !== null && strongWindDuration >= 3) {
+		strongestWinds.push({
+			start: strongWindStart,
+			end: data[data.length - 1].date,
+			duration: strongWindDuration,
+			maxSpeed: strongWindMaxSpeed,
+			maxGusts: strongWindMaxGusts
+		});
+	}
+
+	if (calmStart !== null && calmDuration >= 5) {
+		calmPeriods.push({
+			start: calmStart,
+			end: data[data.length - 1].date,
+			duration: calmDuration,
+			avgSpeed: Math.round((calmTotalSpeed / calmDuration) * 10) / 10
+		});
+	}
+
+	return { strongestWinds, calmPeriods };
+}
+
+/**
+ * Calculate seasonal wind statistics
+ */
+export function calculateSeasonalWindStats(
+	data: WindData[]
+): Partial<Record<Season, SeasonalWindStat[]>> {
+	const seasonalGroups: Partial<Record<Season, Record<number, WindData[]>>> = {};
+
+	data.forEach((item) => {
+		const date = parseISO(item.date);
+		const year = getYear(date);
+		const season = getSeason(date);
+
+		if (!seasonalGroups[season]) seasonalGroups[season] = {};
+		if (!seasonalGroups[season]![year]) seasonalGroups[season]![year] = [];
+		seasonalGroups[season]![year].push(item);
+	});
+
+	const result: Partial<Record<Season, SeasonalWindStat[]>> = {};
+
+	for (const s in seasonalGroups) {
+		const season = s as Season;
+		result[season] = [];
+		const yearlyDataForSeason = seasonalGroups[season]!;
+		for (const y in yearlyDataForSeason) {
+			const year = parseInt(y);
+			const yearSeasonData = yearlyDataForSeason[year];
+
+			if (yearSeasonData.length === 0) continue;
+
+			const meanWindSpeed =
+				yearSeasonData.reduce((sum, day) => sum + day.windSpeed, 0) / yearSeasonData.length;
+			const maxWindSpeed = Math.max(...yearSeasonData.map((d) => d.windSpeed));
+			const maxGusts = Math.max(...yearSeasonData.map((d) => d.windGusts));
+			const calmDays = yearSeasonData.filter((d) => d.windSpeed < 5).length;
+			const gustyDays = yearSeasonData.filter((d) => d.windGusts > 50).length;
+
+			// Calculate prevailing direction
+			const directionCounts = new Array(16).fill(0);
+			yearSeasonData.forEach((d) => {
+				const index = Math.round(d.windDirection / 22.5) % 16;
+				directionCounts[index]++;
+			});
+			const prevailingIndex = directionCounts.indexOf(Math.max(...directionCounts));
+			const prevailingDirection = prevailingIndex * 22.5;
+
+			result[season]!.push({
+				year,
+				season,
+				meanWindSpeed: Math.round(meanWindSpeed * 10) / 10,
+				maxWindSpeed: Math.round(maxWindSpeed * 10) / 10,
+				maxGusts: Math.round(maxGusts * 10) / 10,
+				prevailingDirection: Math.round(prevailingDirection),
+				calmDays,
+				gustyDays
+			});
+		}
+		result[season]!.sort((a, b) => a.year - b.year);
+	}
+	return result;
+}
+
+/**
+ * Calculate wind trend analysis
+ */
+export function calculateWindTrend(windComparisons: WindComparison[]): Trend {
+	if (windComparisons.length < 2) {
+		return {
+			slope: 0,
+			intercept: 0,
+			description: 'Insufficient data for trend analysis'
+		};
+	}
+
+	const years = windComparisons.map((d) => d.year);
+	const speeds = windComparisons.map((d) => d.meanWindSpeed);
+
+	// Simple linear regression
+	const n = years.length;
+	const sumX = years.reduce((a, b) => a + b, 0);
+	const sumY = speeds.reduce((a, b) => a + b, 0);
+	const sumXY = years.reduce((acc, year, i) => acc + year * speeds[i], 0);
+	const sumX2 = years.reduce((acc, year) => acc + year * year, 0);
+
+	const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+	const intercept = (sumY - slope * sumX) / n;
+
+	// Calculate R-squared
+	const meanY = sumY / n;
+	const ssRes = speeds.reduce((acc, speed, i) => {
+		const predicted = slope * years[i] + intercept;
+		return acc + Math.pow(speed - predicted, 2);
+	}, 0);
+	const ssTot = speeds.reduce((acc, speed) => acc + Math.pow(speed - meanY, 2), 0);
+	const rSquared = 1 - ssRes / ssTot;
+
+	let description = '';
+	const trendMagnitude = Math.abs(slope);
+	const speedChangePerDecade = slope * 10;
+
+	if (trendMagnitude < 0.1) {
+		description = 'Wind speeds have remained relatively stable';
+	} else if (slope > 0) {
+		description = `Wind speeds are increasing by ${speedChangePerDecade.toFixed(1)} km/h per decade`;
+	} else {
+		description = `Wind speeds are decreasing by ${Math.abs(speedChangePerDecade).toFixed(1)} km/h per decade`;
+	}
+
+	return {
+		slope: Math.round(slope * 1000) / 1000,
+		intercept: Math.round(intercept * 10) / 10,
+		description,
+		rSquared: Math.round(rSquared * 1000) / 1000
 	};
 }
