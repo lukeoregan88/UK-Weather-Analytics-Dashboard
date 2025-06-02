@@ -52,6 +52,7 @@
 	let yearlyComparison: YearlyComparison[] = [];
 	let currentWeather: any = null;
 	let showMonthlyComparison = false;
+	let selectedMonth = new Date().getMonth();
 	let cacheStats: { totalEntries: number; totalSize: number; oldestEntry: Date | null } = {
 		totalEntries: 0,
 		totalSize: 0,
@@ -190,6 +191,7 @@
 	$: currentYear = new Date().getFullYear();
 	$: currentMonth = new Date().getMonth(); // 0-based (January = 0)
 	$: currentMonthName = new Date().toLocaleString('default', { month: 'long' });
+	$: selectedMonthName = new Date(2024, selectedMonth).toLocaleString('default', { month: 'long' });
 	$: percentiles = historicalData.length > 0 ? calculatePercentiles(historicalData) : null;
 	$: droughtPeriods =
 		historicalData.length > 0 ? calculateDroughtPeriods(historicalData.slice(-90)) : [];
@@ -200,14 +202,14 @@
 			: calculateYearlyComparison(historicalData);
 	$: monthlyComparison =
 		historicalData.length > 0 && temperatureData.length > 0
-			? calculateEnhancedMonthlyComparison(historicalData, temperatureData, currentMonth)
+			? calculateEnhancedMonthlyComparison(historicalData, temperatureData, selectedMonth)
 			: historicalData.length > 0
-				? calculateMonthlyComparison(historicalData, currentMonth)
+				? calculateMonthlyComparison(historicalData, selectedMonth)
 				: [];
 	$: temperatureComparison =
 		temperatureData.length > 0
 			? showMonthlyComparison
-				? calculateMonthlyTemperatureComparison(temperatureData, currentMonth)
+				? calculateMonthlyTemperatureComparison(temperatureData, selectedMonth)
 				: calculateYearlyTemperatureComparison(temperatureData)
 			: [];
 	$: displayedComparison = showMonthlyComparison
@@ -251,6 +253,23 @@
 					year.meanTemperature < min.meanTemperature ? year : min
 				)
 			: null;
+
+	// Calculate available months (months that have passed in current year)
+	$: availableMonths = (() => {
+		const months = [];
+		const now = new Date();
+		const currentMonthIndex = now.getMonth();
+
+		for (let i = 0; i <= currentMonthIndex; i++) {
+			const monthName = new Date(2024, i).toLocaleString('default', { month: 'long' });
+			months.push({ index: i, name: monthName });
+		}
+		return months;
+	})();
+
+	function handleMonthChanged(event: CustomEvent<{ month: number }>) {
+		selectedMonth = event.detail.month;
+	}
 </script>
 
 <div class="min-h-screen bg-gray-50">
@@ -770,6 +789,9 @@
 				{averageYearlyTotal}
 				{wettestYear}
 				{driestYear}
+				{selectedMonth}
+				{availableMonths}
+				on:monthChanged={handleMonthChanged}
 			/>
 
 			<!-- Drought Analysis / Temperature Extremes -->

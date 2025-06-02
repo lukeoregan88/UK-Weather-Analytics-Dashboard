@@ -1,5 +1,8 @@
 <script lang="ts">
 	import type { YearlyComparison } from '../../types.js';
+	import { createEventDispatcher } from 'svelte';
+
+	const dispatch = createEventDispatcher();
 
 	export let displayedComparison: YearlyComparison[];
 	export let loadingData: boolean;
@@ -10,12 +13,27 @@
 	export let wettestYear: YearlyComparison | null;
 	export let driestYear: YearlyComparison | null;
 
+	// New props for month selection
+	export let selectedMonth: number = new Date().getMonth(); // 0-based month index
+	export let availableMonths: Array<{ index: number; name: string }> = [];
+
 	// Internal state for the panel
 	let showAllComparisons = false;
 
 	function toggleMonthlyComparison() {
 		showMonthlyComparison = !showMonthlyComparison;
 	}
+
+	function handleMonthChange(event: Event) {
+		const target = event.target as HTMLSelectElement;
+		const monthIndex = parseInt(target.value);
+		selectedMonth = monthIndex;
+		dispatch('monthChanged', { month: monthIndex });
+	}
+
+	// Get the display name for the selected month
+	$: selectedMonthName =
+		availableMonths.find((m) => m.index === selectedMonth)?.name || currentMonthName;
 </script>
 
 <!-- Yearly Comparison Cards -->
@@ -61,7 +79,7 @@
 	<div class="mb-4 rounded-lg bg-white p-4 shadow-sm">
 		<div class="mb-4 flex items-center justify-between">
 			<h3 class="text-lg font-semibold text-gray-900">
-				{showMonthlyComparison ? `${currentMonthName} Comparison` : '10-Year Comparison'}
+				{showMonthlyComparison ? `${selectedMonthName} Comparison` : '10-Year Comparison'}
 			</h3>
 			<div class="flex items-center space-x-2">
 				<span class="text-xs text-gray-600"> Yearly view </span>
@@ -81,6 +99,27 @@
 				<span class="text-xs text-gray-600"> Monthly view </span>
 			</div>
 		</div>
+
+		<!-- Month Selector (only shown when in monthly view) -->
+		{#if showMonthlyComparison && availableMonths.length > 1}
+			<div class="mb-4 flex items-center justify-center">
+				<div class="flex items-center space-x-2">
+					<label for="month-select" class="text-sm font-medium text-gray-700">
+						Select Month:
+					</label>
+					<select
+						id="month-select"
+						class="rounded-md border border-gray-300 bg-white px-3 py-1 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+						value={selectedMonth}
+						on:change={handleMonthChange}
+					>
+						{#each availableMonths as month}
+							<option value={month.index}>{month.name}</option>
+						{/each}
+					</select>
+				</div>
+			</div>
+		{/if}
 
 		<!-- Visual Cards Layout with Show More functionality -->
 		<div class="relative">
@@ -176,7 +215,7 @@
 										<span class="text-sm font-medium text-gray-600">mm</span>
 									</p>
 									<p class="text-xs text-gray-600">
-										{showMonthlyComparison ? `${currentMonthName} total` : 'Total rainfall'}
+										{showMonthlyComparison ? `${selectedMonthName} total` : 'Total rainfall'}
 									</p>
 								</div>
 
@@ -282,13 +321,13 @@
 			<div class="grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
 				<div class="text-center">
 					<p class="font-medium text-gray-700">
-						Average {showMonthlyComparison ? currentMonthName : 'Annual'}
+						Average {showMonthlyComparison ? selectedMonthName : 'Annual'}
 					</p>
 					<p class="text-lg font-bold text-gray-900">{averageYearlyTotal.toFixed(0)} mm</p>
 				</div>
 				<div class="text-center">
 					<p class="font-medium text-gray-700">
-						Wettest {showMonthlyComparison ? currentMonthName : 'Year'}
+						Wettest {showMonthlyComparison ? selectedMonthName : 'Year'}
 					</p>
 					{#if wettestYear}
 						<p class="text-lg font-bold text-green-700">
@@ -301,7 +340,7 @@
 				</div>
 				<div class="text-center">
 					<p class="font-medium text-gray-700">
-						Driest {showMonthlyComparison ? currentMonthName : 'Year'}
+						Driest {showMonthlyComparison ? selectedMonthName : 'Year'}
 					</p>
 					{#if driestYear}
 						<p class="text-lg font-bold text-red-700">
