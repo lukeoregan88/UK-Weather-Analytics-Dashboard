@@ -716,6 +716,7 @@
 							on:click={() => {
 								showTemperatureView = true;
 								showWindView = false;
+								showSolarView = false;
 							}}
 							class="rounded-lg px-4 py-2 text-sm font-medium transition-colors {showTemperatureView
 								? 'bg-red-600 text-white'
@@ -728,6 +729,7 @@
 							on:click={() => {
 								showTemperatureView = false;
 								showWindView = true;
+								showSolarView = false;
 							}}
 							class="rounded-lg px-4 py-2 text-sm font-medium transition-colors {showWindView
 								? 'bg-cyan-600 text-white'
