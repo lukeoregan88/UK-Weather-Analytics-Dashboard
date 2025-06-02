@@ -18,7 +18,14 @@ import type {
 	WindStats,
 	WindComparison,
 	WindExtremes,
-	SeasonalWindStat
+	SeasonalWindStat,
+	SolarData,
+	SolarStats,
+	SolarComparison,
+	SolarExtremes,
+	SolarEnergyInsights,
+	GrowingInsights,
+	SeasonalSolarStat
 } from '../types.js';
 import { format, getYear, parseISO, getMonth } from 'date-fns';
 
@@ -1173,4 +1180,492 @@ export function calculateWindTrend(windComparisons: WindComparison[]): Trend {
 		description,
 		rSquared: Math.round(rSquared * 1000) / 1000
 	};
+}
+
+/**
+ * Calculate solar radiation statistics for a dataset
+ */
+export function calculateSolarStats(data: SolarData[]): SolarStats {
+	if (data.length === 0) {
+		return {
+			meanRadiation: 0,
+			maxRadiation: 0,
+			minRadiation: 0,
+			totalAnnualRadiation: 0,
+			peakSolarDays: 0,
+			lowSolarDays: 0,
+			avgUvIndex: 0,
+			maxUvIndex: 0
+		};
+	}
+
+	const radiations = data.map((d) => d.solarRadiation);
+
+	const meanRadiation = radiations.reduce((sum, rad) => sum + rad, 0) / radiations.length;
+	const maxRadiation = Math.max(...radiations);
+	const minRadiation = Math.min(...radiations);
+	const totalAnnualRadiation = radiations.reduce((sum, rad) => sum + rad, 0);
+	const peakSolarDays = data.filter((d) => d.solarRadiation > 20).length; // High solar radiation days
+	const lowSolarDays = data.filter((d) => d.solarRadiation < 5).length; // Low solar radiation days
+
+	return {
+		meanRadiation: Math.round(meanRadiation * 10) / 10,
+		maxRadiation: Math.round(maxRadiation * 10) / 10,
+		minRadiation: Math.round(minRadiation * 10) / 10,
+		totalAnnualRadiation: Math.round(totalAnnualRadiation * 10) / 10,
+		peakSolarDays,
+		lowSolarDays,
+		avgUvIndex: 0,
+		maxUvIndex: 0
+	};
+}
+
+/**
+ * Calculate yearly solar radiation comparison statistics
+ */
+export function calculateYearlySolarComparison(data: SolarData[]): SolarComparison[] {
+	const yearlyGroups = data.reduce(
+		(acc, item) => {
+			const year = getYear(parseISO(item.date));
+			if (!acc[year]) acc[year] = [];
+			acc[year].push(item);
+			return acc;
+		},
+		{} as Record<number, SolarData[]>
+	);
+
+	const allYearAverages = Object.values(yearlyGroups).map(
+		(yearData) => yearData.reduce((sum, day) => sum + day.solarRadiation, 0) / yearData.length
+	);
+	const overallAverage =
+		allYearAverages.reduce((sum, avg) => sum + avg, 0) / allYearAverages.length;
+
+	return Object.entries(yearlyGroups)
+		.map(([year, yearData]) => {
+			const meanSolarRadiation =
+				yearData.reduce((sum, day) => sum + day.solarRadiation, 0) / yearData.length;
+			const maxSolarRadiation = Math.max(...yearData.map((d) => d.solarRadiation));
+			const totalSolarRadiation = yearData.reduce((sum, day) => sum + day.solarRadiation, 0);
+			const peakSolarDays = yearData.filter((d) => d.solarRadiation > 20).length;
+			const lowSolarDays = yearData.filter((d) => d.solarRadiation < 5).length;
+			const sunnierThanAverage = meanSolarRadiation > overallAverage;
+
+			return {
+				year: parseInt(year),
+				meanSolarRadiation: Math.round(meanSolarRadiation * 10) / 10,
+				maxSolarRadiation: Math.round(maxSolarRadiation * 10) / 10,
+				totalSolarRadiation: Math.round(totalSolarRadiation * 10) / 10,
+				peakSolarDays,
+				lowSolarDays,
+				sunnierThanAverage,
+				avgUvIndex: 0,
+				maxUvIndex: 0
+			};
+		})
+		.sort((a, b) => a.year - b.year);
+}
+
+/**
+ * Calculate monthly solar radiation comparison for a specific month
+ */
+export function calculateMonthlySolarComparison(
+	data: SolarData[],
+	month: number
+): SolarComparison[] {
+	const monthlyData = data.filter((item) => getMonth(parseISO(item.date)) === month);
+	return calculateYearlySolarComparison(monthlyData);
+}
+
+/**
+ * Get recent solar radiation data
+ */
+export function getRecentSolar(data: SolarData[], days: number): SolarData[] {
+	return data.slice(-days);
+}
+
+/**
+ * Calculate solar radiation extremes and patterns
+ */
+export function calculateSolarExtremes(data: SolarData[]): SolarExtremes {
+	if (data.length === 0) {
+		return {
+			brightestDays: [],
+			dullestDays: [],
+			solarPeaks: [],
+			lowSolarPeriods: []
+		};
+	}
+
+	// Sort by solar radiation for extremes
+	const sortedByRadiation = [...data].sort((a, b) => b.solarRadiation - a.solarRadiation);
+
+	const brightestDays = sortedByRadiation.slice(0, 10).map((d, index) => ({
+		date: d.date,
+		solarRadiation: d.solarRadiation,
+		uvIndex: undefined,
+		rank: index + 1
+	}));
+
+	const dullestDays = sortedByRadiation
+		.slice(-10)
+		.reverse()
+		.map((d, index) => ({
+			date: d.date,
+			solarRadiation: d.solarRadiation,
+			uvIndex: undefined,
+			rank: index + 1
+		}));
+
+	// Find solar peaks (3+ consecutive days with high radiation)
+	const solarPeaks: Array<{
+		start: string;
+		end: string;
+		duration: number;
+		avgRadiation: number;
+		maxRadiation: number;
+	}> = [];
+
+	let currentPeak: SolarData[] = [];
+	for (const day of data) {
+		if (day.solarRadiation > 18) {
+			// High solar radiation threshold
+			currentPeak.push(day);
+		} else {
+			if (currentPeak.length >= 3) {
+				const avgRadiation =
+					currentPeak.reduce((sum, d) => sum + d.solarRadiation, 0) / currentPeak.length;
+				const maxRadiation = Math.max(...currentPeak.map((d) => d.solarRadiation));
+				solarPeaks.push({
+					start: currentPeak[0].date,
+					end: currentPeak[currentPeak.length - 1].date,
+					duration: currentPeak.length,
+					avgRadiation: Math.round(avgRadiation * 10) / 10,
+					maxRadiation: Math.round(maxRadiation * 10) / 10
+				});
+			}
+			currentPeak = [];
+		}
+	}
+
+	// Find low solar periods (5+ consecutive days with low radiation)
+	const lowSolarPeriods: Array<{
+		start: string;
+		end: string;
+		duration: number;
+		avgRadiation: number;
+	}> = [];
+
+	let currentLowPeriod: SolarData[] = [];
+	for (const day of data) {
+		if (day.solarRadiation < 7) {
+			// Low solar radiation threshold
+			currentLowPeriod.push(day);
+		} else {
+			if (currentLowPeriod.length >= 5) {
+				const avgRadiation =
+					currentLowPeriod.reduce((sum, d) => sum + d.solarRadiation, 0) / currentLowPeriod.length;
+				lowSolarPeriods.push({
+					start: currentLowPeriod[0].date,
+					end: currentLowPeriod[currentLowPeriod.length - 1].date,
+					duration: currentLowPeriod.length,
+					avgRadiation: Math.round(avgRadiation * 10) / 10
+				});
+			}
+			currentLowPeriod = [];
+		}
+	}
+
+	return {
+		brightestDays,
+		dullestDays,
+		solarPeaks,
+		lowSolarPeriods
+	};
+}
+
+/**
+ * Calculate solar energy insights for renewable energy potential
+ */
+export function calculateSolarEnergyInsights(
+	solarData: SolarData[],
+	latitude: number
+): SolarEnergyInsights {
+	if (solarData.length === 0) {
+		return {
+			dailyEnergyPotential: 0,
+			monthlyEnergyPotential: 0,
+			yearlyEnergyPotential: 0,
+			optimalTiltAngle: 0,
+			seasonalVariation: {
+				spring: 0,
+				summer: 0,
+				autumn: 0,
+				winter: 0
+			}
+		};
+	}
+
+	// Standard solar panel efficiency assumptions
+	const panelEfficiency = 0.2; // 20% efficiency
+	const systemEfficiency = 0.85; // 85% system efficiency
+	const panelArea = 1; // 1 m² for calculations
+
+	// Convert MJ/m²/day to kWh/m²/day (1 MJ/m² = 0.278 kWh/m²)
+	const avgDailySolarKwh =
+		(solarData.reduce((sum, d) => sum + d.solarRadiation, 0) / solarData.length) * 0.278;
+
+	const dailyEnergyPotential = avgDailySolarKwh * panelEfficiency * systemEfficiency * panelArea;
+	const monthlyEnergyPotential = dailyEnergyPotential * 30;
+	const yearlyEnergyPotential = dailyEnergyPotential * 365;
+
+	// Optimal tilt angle approximation (latitude - 15° to latitude + 15° range, optimal around latitude)
+	const optimalTiltAngle = Math.round(latitude);
+
+	// Calculate seasonal variations
+	const seasonalData = {
+		spring: solarData.filter((d) => {
+			const month = getMonth(parseISO(d.date));
+			return month >= 2 && month <= 4; // March, April, May
+		}),
+		summer: solarData.filter((d) => {
+			const month = getMonth(parseISO(d.date));
+			return month >= 5 && month <= 7; // June, July, August
+		}),
+		autumn: solarData.filter((d) => {
+			const month = getMonth(parseISO(d.date));
+			return month >= 8 && month <= 10; // September, October, November
+		}),
+		winter: solarData.filter((d) => {
+			const month = getMonth(parseISO(d.date));
+			return month === 11 || month <= 1; // December, January, February
+		})
+	};
+
+	const seasonalVariation = {
+		spring:
+			seasonalData.spring.length > 0
+				? (seasonalData.spring.reduce((sum, d) => sum + d.solarRadiation, 0) /
+						seasonalData.spring.length) *
+					0.278 *
+					panelEfficiency *
+					systemEfficiency
+				: 0,
+		summer:
+			seasonalData.summer.length > 0
+				? (seasonalData.summer.reduce((sum, d) => sum + d.solarRadiation, 0) /
+						seasonalData.summer.length) *
+					0.278 *
+					panelEfficiency *
+					systemEfficiency
+				: 0,
+		autumn:
+			seasonalData.autumn.length > 0
+				? (seasonalData.autumn.reduce((sum, d) => sum + d.solarRadiation, 0) /
+						seasonalData.autumn.length) *
+					0.278 *
+					panelEfficiency *
+					systemEfficiency
+				: 0,
+		winter:
+			seasonalData.winter.length > 0
+				? (seasonalData.winter.reduce((sum, d) => sum + d.solarRadiation, 0) /
+						seasonalData.winter.length) *
+					0.278 *
+					panelEfficiency *
+					systemEfficiency
+				: 0
+	};
+
+	return {
+		dailyEnergyPotential: Math.round(dailyEnergyPotential * 100) / 100,
+		monthlyEnergyPotential: Math.round(monthlyEnergyPotential * 100) / 100,
+		yearlyEnergyPotential: Math.round(yearlyEnergyPotential * 100) / 100,
+		optimalTiltAngle,
+		seasonalVariation: {
+			spring: Math.round(seasonalVariation.spring * 100) / 100,
+			summer: Math.round(seasonalVariation.summer * 100) / 100,
+			autumn: Math.round(seasonalVariation.autumn * 100) / 100,
+			winter: Math.round(seasonalVariation.winter * 100) / 100
+		}
+	};
+}
+
+/**
+ * Calculate growing insights for agriculture and gardening
+ */
+export function calculateGrowingInsights(
+	temperatureData: TemperatureData[],
+	solarData: SolarData[]
+): GrowingInsights {
+	if (temperatureData.length === 0 || solarData.length === 0) {
+		return {
+			growingDegreeDays: 0,
+			frostFreeDays: 0,
+			optimalGrowingSeason: {
+				start: '',
+				end: '',
+				duration: 0
+			},
+			solarGrowingConditions: 'Poor',
+			recommendedCrops: []
+		};
+	}
+
+	// Calculate Growing Degree Days (base 10°C)
+	const baseTemp = 10;
+	const growingDegreeDays = temperatureData.reduce((sum, day) => {
+		const avgTemp = day.temperature;
+		return sum + Math.max(0, avgTemp - baseTemp);
+	}, 0);
+
+	// Calculate frost-free days
+	const frostFreeDays = temperatureData.filter((day) => day.temperatureMin > 0).length;
+
+	// Estimate growing season (last spring frost to first autumn frost)
+	const currentYear = new Date().getFullYear();
+	const currentYearTempData = temperatureData.filter(
+		(d) => getYear(parseISO(d.date)) === currentYear
+	);
+
+	let growingSeasonStart = '';
+	let growingSeasonEnd = '';
+	let duration = 0;
+
+	if (currentYearTempData.length > 0) {
+		// Find last spring frost (temperature < 0°C before June)
+		const springData = currentYearTempData.filter((d) => {
+			const month = getMonth(parseISO(d.date));
+			return month <= 5; // January to June
+		});
+
+		const lastSpringFrost = springData.reverse().find((d) => d.temperatureMin < 0);
+		if (lastSpringFrost) {
+			const lastFrostDate = parseISO(lastSpringFrost.date);
+			lastFrostDate.setDate(lastFrostDate.getDate() + 7); // Add safety margin
+			growingSeasonStart = format(lastFrostDate, 'yyyy-MM-dd');
+		} else {
+			growingSeasonStart = format(new Date(currentYear, 2, 15), 'yyyy-MM-dd'); // Default March 15
+		}
+
+		// Find first autumn frost (temperature < 0°C after August)
+		const autumnData = currentYearTempData.filter((d) => {
+			const month = getMonth(parseISO(d.date));
+			return month >= 7; // August onwards
+		});
+
+		const firstAutumnFrost = autumnData.find((d) => d.temperatureMin < 0);
+		if (firstAutumnFrost) {
+			growingSeasonEnd = firstAutumnFrost.date;
+		} else {
+			growingSeasonEnd = format(new Date(currentYear, 9, 15), 'yyyy-MM-dd'); // Default October 15
+		}
+
+		// Calculate duration
+		const startDate = parseISO(growingSeasonStart);
+		const endDate = parseISO(growingSeasonEnd);
+		duration = Math.max(
+			0,
+			Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
+		);
+	}
+
+	// Assess solar growing conditions
+	const avgSolarRadiation =
+		solarData.reduce((sum, d) => sum + d.solarRadiation, 0) / solarData.length;
+	let solarGrowingConditions: 'Poor' | 'Fair' | 'Good' | 'Excellent';
+
+	if (avgSolarRadiation < 8) {
+		solarGrowingConditions = 'Poor';
+	} else if (avgSolarRadiation < 12) {
+		solarGrowingConditions = 'Fair';
+	} else if (avgSolarRadiation < 16) {
+		solarGrowingConditions = 'Good';
+	} else {
+		solarGrowingConditions = 'Excellent';
+	}
+
+	// Recommend crops based on growing conditions
+	const avgTemp =
+		temperatureData.reduce((sum, d) => sum + d.temperature, 0) / temperatureData.length;
+	let recommendedCrops: string[] = [];
+
+	if (avgTemp >= 15 && avgSolarRadiation >= 12 && frostFreeDays >= 180) {
+		recommendedCrops = ['Tomatoes', 'Peppers', 'Courgettes', 'Sweetcorn', 'Beans'];
+	} else if (avgTemp >= 12 && avgSolarRadiation >= 10 && frostFreeDays >= 150) {
+		recommendedCrops = ['Carrots', 'Beetroot', 'Lettuce', 'Spinach', 'Radishes'];
+	} else if (avgTemp >= 8 && frostFreeDays >= 120) {
+		recommendedCrops = ['Cabbage', 'Brussels sprouts', 'Leeks', 'Onions', 'Potatoes'];
+	} else {
+		recommendedCrops = ['Hardy herbs', 'Winter salads', 'Sprouting broccoli'];
+	}
+
+	return {
+		growingDegreeDays: Math.round(growingDegreeDays),
+		frostFreeDays,
+		optimalGrowingSeason: {
+			start: growingSeasonStart,
+			end: growingSeasonEnd,
+			duration
+		},
+		solarGrowingConditions,
+		recommendedCrops
+	};
+}
+
+/**
+ * Calculate seasonal solar statistics
+ */
+export function calculateSeasonalSolarStats(
+	data: SolarData[]
+): Partial<Record<Season, SeasonalSolarStat[]>> {
+	const seasonalGroups: Partial<Record<Season, Record<number, SolarData[]>>> = {};
+
+	data.forEach((item) => {
+		const date = parseISO(item.date);
+		const year = getYear(date);
+		const season = getSeason(date);
+
+		if (!seasonalGroups[season]) seasonalGroups[season] = {};
+		if (!seasonalGroups[season]![year]) seasonalGroups[season]![year] = [];
+		seasonalGroups[season]![year].push(item);
+	});
+
+	const result: Partial<Record<Season, SeasonalSolarStat[]>> = {};
+
+	for (const s in seasonalGroups) {
+		const season = s as Season;
+		result[season] = [];
+		const yearlyDataForSeason = seasonalGroups[season]!;
+		for (const y in yearlyDataForSeason) {
+			const year = parseInt(y);
+			const yearSeasonData = yearlyDataForSeason[year];
+
+			if (yearSeasonData.length === 0) continue;
+
+			const meanSolarRadiation =
+				yearSeasonData.reduce((sum, day) => sum + day.solarRadiation, 0) / yearSeasonData.length;
+			const maxSolarRadiation = Math.max(...yearSeasonData.map((d) => d.solarRadiation));
+			const totalSolarRadiation = yearSeasonData.reduce((sum, day) => sum + day.solarRadiation, 0);
+			const peakSolarDays = yearSeasonData.filter((d) => d.solarRadiation > 20).length;
+
+			// Calculate energy potential for the season
+			const panelEfficiency = 0.2;
+			const systemEfficiency = 0.85;
+			const energyPotential =
+				meanSolarRadiation * 0.278 * panelEfficiency * systemEfficiency * yearSeasonData.length;
+
+			result[season]!.push({
+				year,
+				season,
+				meanSolarRadiation: Math.round(meanSolarRadiation * 10) / 10,
+				maxSolarRadiation: Math.round(maxSolarRadiation * 10) / 10,
+				totalSolarRadiation: Math.round(totalSolarRadiation * 10) / 10,
+				peakSolarDays,
+				avgUvIndex: 0,
+				energyPotential: Math.round(energyPotential * 100) / 100
+			});
+		}
+		result[season]!.sort((a, b) => a.year - b.year);
+	}
+	return result;
 }

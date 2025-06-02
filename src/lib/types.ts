@@ -86,6 +86,9 @@ export interface WeatherApiResponse {
 		wind_speed_10m_mean?: number[];
 		wind_direction_10m_dominant?: number[];
 		wind_gusts_10m_max?: number[];
+		shortwave_radiation_sum?: number[]; // solar radiation in MJ/m²
+		uv_index_max?: number[]; // maximum UV index
+		sunshine_duration?: number[]; // sunshine duration in seconds
 	};
 }
 
@@ -142,6 +145,7 @@ export interface EnhancedStatistics {
 	seasonalRainfall: Partial<Record<Season, SeasonalRainfallStat[]>>;
 	seasonalTemperature: Partial<Record<Season, SeasonalTemperatureStat[]>>;
 	seasonalWind?: Partial<Record<Season, SeasonalWindStat[]>>;
+	seasonalSolar?: Partial<Record<Season, SeasonalSolarStat[]>>;
 	topWettestDays: ExtremeRainfallEvent[];
 	topDryestDays?: ExtremeRainfallEvent[];
 	topWettestMonths: MonthlyRainfall[];
@@ -150,9 +154,14 @@ export interface EnhancedStatistics {
 	topColdestDays: ExtremeTemperatureEvent[];
 	topWindiestDays?: ExtremeWindEvent[];
 	topCalmestDays?: ExtremeWindEvent[];
+	topBrightestDays?: Array<{ date: string; solarRadiation: number; rank: number }>;
+	topDullestDays?: Array<{ date: string; solarRadiation: number; rank: number }>;
 	rainfallTrend?: Trend;
 	temperatureTrend?: Trend;
 	windTrend?: Trend;
+	solarTrend?: Trend;
+	solarEnergyInsights?: SolarEnergyInsights;
+	growingInsights?: GrowingInsights;
 }
 
 // New wind-specific types
@@ -214,4 +223,102 @@ export interface ExtremeWindEvent extends WindData {
 	rank?: number; // Position in the ranking
 	percentile?: number; // Percentile within historical data
 	severity?: 'Light' | 'Moderate' | 'Strong' | 'Severe' | 'Extreme';
+}
+
+// New solar radiation types
+export interface SolarData {
+	date: string;
+	solarRadiation: number; // solar radiation in MJ/m²/day
+	solarRadiationSum: number; // daily solar radiation sum in MJ/m²
+	uvIndex?: number; // UV index
+	sunshineDuration?: number; // sunshine duration in seconds
+}
+
+export interface SolarStats {
+	meanRadiation: number; // average daily solar radiation
+	maxRadiation: number; // maximum daily solar radiation
+	minRadiation: number; // minimum daily solar radiation
+	totalAnnualRadiation: number; // total annual solar radiation
+	peakSolarDays: number; // days with high solar radiation (>20 MJ/m²)
+	lowSolarDays: number; // days with low solar radiation (<5 MJ/m²)
+	avgUvIndex: number; // average UV index
+	maxUvIndex: number; // maximum UV index
+}
+
+export interface SolarComparison {
+	year: number;
+	meanSolarRadiation: number;
+	maxSolarRadiation: number;
+	totalSolarRadiation: number;
+	peakSolarDays: number; // days with >20 MJ/m²/day
+	lowSolarDays: number; // days with <5 MJ/m²/day
+	sunnierThanAverage: boolean;
+	avgUvIndex: number;
+	maxUvIndex: number;
+}
+
+export interface SolarExtremes {
+	brightestDays: Array<{
+		date: string;
+		solarRadiation: number;
+		uvIndex?: number;
+		rank: number;
+	}>;
+	dullestDays: Array<{
+		date: string;
+		solarRadiation: number;
+		uvIndex?: number;
+		rank: number;
+	}>;
+	solarPeaks: Array<{
+		start: string;
+		end: string;
+		duration: number;
+		avgRadiation: number;
+		maxRadiation: number;
+	}>;
+	lowSolarPeriods: Array<{
+		start: string;
+		end: string;
+		duration: number;
+		avgRadiation: number;
+	}>;
+}
+
+// Solar energy calculations
+export interface SolarEnergyInsights {
+	dailyEnergyPotential: number; // kWh potential per day (assuming standard solar panel efficiency)
+	monthlyEnergyPotential: number; // kWh potential per month
+	yearlyEnergyPotential: number; // kWh potential per year
+	optimalTiltAngle: number; // optimal solar panel tilt angle for this location
+	seasonalVariation: {
+		spring: number;
+		summer: number;
+		autumn: number;
+		winter: number;
+	}; // seasonal energy potential variation
+}
+
+// Growing insights for agriculture/gardening
+export interface GrowingInsights {
+	growingDegreeDays: number; // accumulated growing degree days
+	frostFreeDays: number; // number of frost-free days
+	optimalGrowingSeason: {
+		start: string; // estimated growing season start
+		end: string; // estimated growing season end
+		duration: number; // growing season length in days
+	};
+	solarGrowingConditions: 'Poor' | 'Fair' | 'Good' | 'Excellent';
+	recommendedCrops: string[]; // crops suitable for this solar/temperature combination
+}
+
+export interface SeasonalSolarStat {
+	year: number;
+	season: Season;
+	meanSolarRadiation: number;
+	maxSolarRadiation: number;
+	totalSolarRadiation: number;
+	peakSolarDays: number;
+	avgUvIndex: number;
+	energyPotential: number; // kWh potential for the season
 }

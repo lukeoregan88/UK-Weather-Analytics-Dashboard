@@ -3,6 +3,7 @@
 	import RainfallChart from './RainfallChart.svelte';
 	import TemperatureChart from './TemperatureChart.svelte';
 	import WindChart from './WindChart.svelte';
+	import SolarChart from './SolarChart.svelte';
 	import LocationMap from './LocationMap.svelte';
 	import YearlyComparisonPanel from './panels/YearlyComparisonPanel.svelte';
 	import EnhancedStatisticsPanel from './panels/EnhancedStatisticsPanel.svelte';
@@ -17,6 +18,12 @@
 		WindStats,
 		WindComparison,
 		WindExtremes,
+		SolarData,
+		SolarStats,
+		SolarComparison,
+		SolarExtremes,
+		SolarEnergyInsights,
+		GrowingInsights,
 		EnhancedStatistics
 	} from '../types.js';
 	import {
@@ -25,7 +32,8 @@
 		getCurrentYearRainfall,
 		getCurrentWeather,
 		getTenYearTemperatureData,
-		getTenYearWindData
+		getTenYearWindData,
+		getTenYearSolarData
 	} from '../services/weatherApi.js';
 	import {
 		calculateYearlyComparison,
@@ -45,9 +53,16 @@
 		calculateYearlyWindComparison,
 		calculateMonthlyWindComparison,
 		getRecentWind,
-		calculateWindExtremes
+		calculateWindExtremes,
+		calculateSolarStats,
+		calculateYearlySolarComparison,
+		calculateMonthlySolarComparison,
+		getRecentSolar,
+		calculateSolarExtremes,
+		calculateSolarEnergyInsights,
+		calculateGrowingInsights
 	} from '../utils/dataProcessing.js';
-	import { format } from 'date-fns';
+	import { format, parseISO } from 'date-fns';
 	import { cacheService, postcodeStorage } from '../services/cacheService.js';
 
 	let postcode = '';
@@ -91,8 +106,23 @@
 		calmPeriods: []
 	};
 
+	// Solar data
+	let solarData: SolarData[] = [];
+	let recentSolarData: SolarData[] = [];
+	let solarStats: SolarStats | null = null;
+	let solarComparison: SolarComparison[] = [];
+	let solarExtremes: SolarExtremes = {
+		brightestDays: [],
+		dullestDays: [],
+		solarPeaks: [],
+		lowSolarPeriods: []
+	};
+	let solarEnergyInsights: SolarEnergyInsights | null = null;
+	let growingInsights: GrowingInsights | null = null;
+
 	let showTemperatureView = false;
 	let showWindView = false;
+	let showSolarView = false;
 	let enhancedStats: EnhancedStatistics | null = null;
 
 	async function searchLocation() {
@@ -110,6 +140,7 @@
 		recentData = [];
 		temperatureData = [];
 		windData = [];
+		solarData = [];
 		currentWeather = null;
 		enhancedStats = null;
 
@@ -160,6 +191,14 @@
 			recentWindData = getRecentWind(windData, 30);
 			windStats = calculateWindStats(windData);
 			windExtremes = calculateWindExtremes(windData.slice(-90));
+
+			// Load solar data
+			solarData = await getTenYearSolarData(location.latitude, location.longitude);
+			recentSolarData = getRecentSolar(solarData, 30);
+			solarStats = calculateSolarStats(solarData);
+			solarExtremes = calculateSolarExtremes(solarData.slice(-90));
+			solarEnergyInsights = calculateSolarEnergyInsights(solarData, location.latitude);
+			growingInsights = calculateGrowingInsights(temperatureData, solarData);
 
 			loadingCharts = false;
 
@@ -662,9 +701,11 @@
 							on:click={() => {
 								showTemperatureView = false;
 								showWindView = false;
+								showSolarView = false;
 							}}
 							class="rounded-lg px-4 py-2 text-sm font-medium transition-colors {!showTemperatureView &&
-							!showWindView
+							!showWindView &&
+							!showSolarView
 								? 'bg-blue-600 text-white'
 								: 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
 						>
@@ -695,6 +736,19 @@
 							<i class="fa-solid fa-wind mr-2"></i>
 							Wind Analysis
 						</button>
+						<button
+							on:click={() => {
+								showTemperatureView = false;
+								showWindView = false;
+								showSolarView = true;
+							}}
+							class="rounded-lg px-4 py-2 text-sm font-medium transition-colors {showSolarView
+								? 'bg-yellow-600 text-white'
+								: 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
+						>
+							<i class="fa-solid fa-sun mr-2"></i>
+							Solar & Growing Analysis
+						</button>
 					</div>
 				</div>
 			</div>
@@ -710,6 +764,52 @@
 							<div class="h-3 w-16 animate-pulse rounded bg-gray-200"></div>
 						</div>
 					{/each}
+				{:else if showSolarView && solarStats}
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">
+							Average Solar Radiation
+						</h3>
+						<p class="mt-1 text-2xl font-bold text-gray-900">
+							{solarStats.meanRadiation.toFixed(1)} MJ/m²
+						</p>
+						<p class="text-xs text-gray-600">Daily average</p>
+					</div>
+
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">
+							Peak Solar Days
+						</h3>
+						<p class="mt-1 text-2xl font-bold text-gray-900">{solarStats.peakSolarDays}</p>
+						<p class="text-xs text-gray-600">Days > 20 MJ/m²</p>
+					</div>
+
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">
+							Energy Potential
+						</h3>
+						<p class="mt-1 text-2xl font-bold text-gray-900">
+							{solarEnergyInsights?.dailyEnergyPotential.toFixed(2) || '0'} kWh
+						</p>
+						<p class="text-xs text-gray-600">Per m² per day</p>
+					</div>
+
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">
+							Sunshine Duration
+						</h3>
+						<p class="mt-1 text-2xl font-bold text-gray-900">
+							{solarData.length > 0
+								? (
+										solarData
+											.filter((d) => d.sunshineDuration !== undefined)
+											.reduce((sum, d) => sum + (d.sunshineDuration || 0), 0) /
+										solarData.filter((d) => d.sunshineDuration !== undefined).length /
+										3600
+									).toFixed(1)
+								: '0.0'} hrs
+						</p>
+						<p class="text-xs text-gray-600">Daily average</p>
+					</div>
 				{:else if showWindView && windStats}
 					<div class="rounded-lg bg-white p-4 shadow-sm">
 						<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">
@@ -875,6 +975,51 @@
 										class="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"
 									></div>
 									<p class="mt-2 text-sm text-gray-500">Loading wind data...</p>
+								</div>
+							</div>
+						{/if}
+					</div>
+				{:else if showSolarView}
+					<!-- Recent Solar Data -->
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="mb-3 text-lg font-semibold text-gray-900">Solar Radiation (Last 30 Days)</h3>
+						{#if recentSolarData.length > 0}
+							<SolarChart
+								data={recentSolarData}
+								title="Solar Radiation (Last 30 Days)"
+								type="line"
+								height={300}
+							/>
+						{:else}
+							<div class="flex items-center justify-center py-16">
+								<div class="text-center">
+									<div
+										class="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"
+									></div>
+									<p class="mt-2 text-sm text-gray-500">Loading solar data...</p>
+								</div>
+							</div>
+						{/if}
+					</div>
+
+					<!-- Energy Potential -->
+					<div class="rounded-lg bg-white p-4 shadow-sm">
+						<h3 class="mb-3 text-lg font-semibold text-gray-900">Solar Energy Potential</h3>
+						{#if recentSolarData.length > 0}
+							<SolarChart
+								data={recentSolarData}
+								title="Energy Potential (Last 30 Days)"
+								type="bar"
+								height={300}
+								showEnergy={true}
+							/>
+						{:else}
+							<div class="flex items-center justify-center py-16">
+								<div class="text-center">
+									<div
+										class="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"
+									></div>
+									<p class="mt-2 text-sm text-gray-500">Loading solar data...</p>
 								</div>
 							</div>
 						{/if}
@@ -1437,6 +1582,113 @@
 
 			<!-- Enhanced Statistics Section -->
 			<EnhancedStatisticsPanel {enhancedStats} {loadingData} />
+
+			<!-- Growing Insights Panel -->
+			{#if showSolarView && growingInsights}
+				<div class="rounded-lg bg-white p-4 shadow-sm">
+					<div class="mb-4 flex items-center">
+						<div class="mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-green-100">
+							<i class="fa-solid fa-seedling text-green-600"></i>
+						</div>
+						<div>
+							<h3 class="text-lg font-semibold text-gray-900">Growing Season Insights</h3>
+							<p class="text-xs text-gray-600">Agricultural and gardening recommendations</p>
+						</div>
+					</div>
+
+					<div class="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
+						<!-- Growing Season Overview -->
+						<div class="rounded-lg border border-green-200 bg-green-50 p-4">
+							<h4 class="text-md mb-3 font-medium text-green-900">Growing Season</h4>
+							<div class="space-y-2">
+								<div class="flex justify-between">
+									<span class="text-sm text-green-700">Start:</span>
+									<span class="text-sm font-medium text-green-800">
+										{growingInsights.optimalGrowingSeason.start
+											? format(parseISO(growingInsights.optimalGrowingSeason.start), 'dd MMM yyyy')
+											: 'Data not available'}
+									</span>
+								</div>
+								<div class="flex justify-between">
+									<span class="text-sm text-green-700">End:</span>
+									<span class="text-sm font-medium text-green-800">
+										{growingInsights.optimalGrowingSeason.end
+											? format(parseISO(growingInsights.optimalGrowingSeason.end), 'dd MMM yyyy')
+											: 'Data not available'}
+									</span>
+								</div>
+								<div class="flex justify-between">
+									<span class="text-sm text-green-700">Duration:</span>
+									<span class="text-sm font-medium text-green-800">
+										{growingInsights.optimalGrowingSeason.duration} days
+									</span>
+								</div>
+								<div class="flex justify-between">
+									<span class="text-sm text-green-700">Frost-free days:</span>
+									<span class="text-sm font-medium text-green-800">
+										{growingInsights.frostFreeDays}
+									</span>
+								</div>
+							</div>
+						</div>
+
+						<!-- Solar Growing Conditions -->
+						<div class="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+							<h4 class="text-md mb-3 font-medium text-yellow-900">Solar Conditions</h4>
+							<div class="space-y-2">
+								<div class="flex justify-between">
+									<span class="text-sm text-yellow-700">Light conditions:</span>
+									<span
+										class="text-sm font-medium text-yellow-800 {growingInsights.solarGrowingConditions ===
+										'Excellent'
+											? 'text-green-600'
+											: growingInsights.solarGrowingConditions === 'Good'
+												? 'text-green-500'
+												: growingInsights.solarGrowingConditions === 'Fair'
+													? 'text-yellow-600'
+													: 'text-red-600'}"
+									>
+										{growingInsights.solarGrowingConditions}
+									</span>
+								</div>
+								<div class="flex justify-between">
+									<span class="text-sm text-yellow-700">Growing degree days:</span>
+									<span class="text-sm font-medium text-yellow-800">
+										{growingInsights.growingDegreeDays}
+									</span>
+								</div>
+								{#if solarEnergyInsights}
+									<div class="flex justify-between">
+										<span class="text-sm text-yellow-700">Energy potential:</span>
+										<span class="text-sm font-medium text-yellow-800">
+											{solarEnergyInsights.yearlyEnergyPotential.toFixed(0)} kWh/m²/year
+										</span>
+									</div>
+								{/if}
+							</div>
+						</div>
+
+						<!-- Recommended Crops -->
+						<div class="lg:col-span-2">
+							<div class="rounded-lg border border-blue-200 bg-blue-50 p-4">
+								<h4 class="text-md mb-3 font-medium text-blue-900">Recommended Crops</h4>
+								<div class="flex flex-wrap gap-2">
+									{#each growingInsights.recommendedCrops as crop}
+										<span
+											class="inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800"
+										>
+											{crop}
+										</span>
+									{/each}
+								</div>
+								<p class="mt-2 text-xs text-blue-700">
+									Based on average temperature, solar radiation, and frost-free days in your area.
+								</p>
+							</div>
+						</div>
+					</div>
+				</div>
+			{/if}
 		{/if}
 	</div>
 

@@ -4,7 +4,8 @@ import type {
 	PostcodeApiResponse,
 	RainfallData,
 	TemperatureData,
-	WindData
+	WindData,
+	SolarData
 } from '../types.js';
 import { format } from 'date-fns';
 import { cacheService } from './cacheService.js';
@@ -60,7 +61,7 @@ export async function getHistoricalRainfall(
 	url.searchParams.set('end_date', end);
 	url.searchParams.set(
 		'daily',
-		'precipitation_sum,temperature_2m_mean,temperature_2m_min,temperature_2m_max,wind_speed_10m_mean,wind_direction_10m_dominant,wind_gusts_10m_max'
+		'precipitation_sum,temperature_2m_mean,temperature_2m_min,temperature_2m_max,wind_speed_10m_mean,wind_direction_10m_dominant,wind_gusts_10m_max,shortwave_radiation_sum,sunshine_duration'
 	);
 	url.searchParams.set('timezone', 'Europe/London');
 
@@ -285,5 +286,69 @@ export async function getTenYearWindData(latitude: number, longitude: number): P
 	} catch (error) {
 		console.error('Wind API fetch error:', error);
 		throw new Error(`Failed to fetch wind data: ${error}`);
+	}
+}
+
+/**
+ * Get solar radiation data for the last 10 years
+ */
+export async function getTenYearSolarData(
+	latitude: number,
+	longitude: number
+): Promise<SolarData[]> {
+	// Check cache first
+	const cached = cacheService.get<SolarData[]>(latitude, longitude, 'solar_historical');
+	if (cached) {
+		return cached;
+	}
+
+	const currentYear = new Date().getFullYear();
+	const startDate = new Date(currentYear - 10, 0, 1);
+	const endDate = new Date();
+
+	const start = format(startDate, 'yyyy-MM-dd');
+	const end = format(endDate, 'yyyy-MM-dd');
+
+	const url = new URL('https://archive-api.open-meteo.com/v1/archive');
+	url.searchParams.set('latitude', latitude.toString());
+	url.searchParams.set('longitude', longitude.toString());
+	url.searchParams.set('start_date', start);
+	url.searchParams.set('end_date', end);
+	url.searchParams.set('daily', 'shortwave_radiation_sum,sunshine_duration');
+	url.searchParams.set('timezone', 'Europe/London');
+
+	try {
+		console.log('Fetching solar data from:', url.toString());
+		const response = await fetch(url.toString());
+
+		if (!response.ok) {
+			const errorText = await response.text();
+			console.error('Solar API error:', response.status, errorText);
+			throw new Error(`Solar API error: ${response.status} - ${errorText}`);
+		}
+
+		const data: WeatherApiResponse = await response.json();
+
+		if (!data.daily || !data.daily.time) {
+			throw new Error('Invalid response format from solar API');
+		}
+
+		const solarData: SolarData[] = data.daily.time
+			.map((date, index) => ({
+				date,
+				solarRadiation: data.daily.shortwave_radiation_sum?.[index] || 0,
+				solarRadiationSum: data.daily.shortwave_radiation_sum?.[index] || 0,
+				uvIndex: undefined, // No UV Index data
+				sunshineDuration: data.daily.sunshine_duration?.[index]
+			}))
+			.filter((d) => d.solarRadiation !== null);
+
+		// Cache the result
+		cacheService.set(latitude, longitude, 'solar_historical', solarData);
+
+		return solarData;
+	} catch (error) {
+		console.error('Solar API fetch error:', error);
+		throw new Error(`Failed to fetch solar data: ${error}`);
 	}
 }
