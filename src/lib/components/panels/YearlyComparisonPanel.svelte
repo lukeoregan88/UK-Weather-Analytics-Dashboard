@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
 	import type { YearlyComparison } from '../../types.js';
 
 	export let displayedComparison: YearlyComparison[];
@@ -14,11 +13,8 @@
 	// Internal state for the panel
 	let showAllComparisons = false;
 
-	const dispatch = createEventDispatcher();
-
 	function toggleMonthlyComparison() {
 		showMonthlyComparison = !showMonthlyComparison;
-		dispatch('toggleMonthly', showMonthlyComparison);
 	}
 </script>
 
