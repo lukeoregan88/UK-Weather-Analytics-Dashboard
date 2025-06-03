@@ -131,8 +131,7 @@
 					{@const maxRainfall = Math.max(...displayedComparison.map((y) => y.totalRainfall))}
 					{@const rainfallPercentage = (year.totalRainfall / maxRainfall) * 100}
 					{@const isInFirstRow = index < 4}
-					{@const isInSecondRow = index >= 4 && index < 8}
-					{@const shouldShow = showAllComparisons || isInFirstRow || isInSecondRow}
+					{@const shouldShow = showAllComparisons || isInFirstRow}
 
 					{#if shouldShow}
 						<div
@@ -140,10 +139,7 @@
 								? 'border-blue-300 bg-gradient-to-br from-blue-50 to-indigo-50 ring-1 ring-blue-200'
 								: isAboveAverage
 									? 'border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 hover:border-green-300'
-									: 'border-red-200 bg-gradient-to-br from-red-50 to-orange-50 hover:border-red-300'} {!showAllComparisons &&
-							isInSecondRow
-								? 'pointer-events-none opacity-40 blur-[1px]'
-								: ''}"
+									: 'border-red-200 bg-gradient-to-br from-red-50 to-orange-50 hover:border-red-300'}"
 						>
 							<!-- Year Badge -->
 							<div class="absolute top-2 right-2">

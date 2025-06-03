@@ -233,11 +233,12 @@ export function calculateMonthlyComparison(
 	targetMonth: number
 ): YearlyComparison[] {
 	const yearlyGroups = groupByYear(data);
+	const currentYear = new Date().getFullYear();
 
 	return Object.entries(yearlyGroups)
 		.map(([year, yearData]) => {
 			// Filter data for the target month (0-based, so January = 0)
-			const monthData = yearData.filter((day) => {
+			const monthData = yearData.filter((day: RainfallData) => {
 				const date = parseISO(day.date);
 				return getMonth(date) === targetMonth;
 			});
@@ -255,7 +256,14 @@ export function calculateMonthlyComparison(
 				wetDays
 			};
 		})
-		.filter((yearData) => yearData.totalRainfall > 0 || yearData.wetDays > 0) // Only include years with data for this month
+		.filter((yearData) => {
+			// Include current year if we have any data for this month, even if no rainfall
+			// For previous years, only include if there's meaningful rainfall or wet days
+			if (yearData.year === currentYear) {
+				return true; // Always include current year
+			}
+			return yearData.totalRainfall > 0 || yearData.wetDays > 0; // Only include years with data for this month
+		})
 		.sort((a, b) => a.year - b.year);
 }
 
@@ -338,11 +346,12 @@ export function calculateMonthlyTemperatureComparison(
 		},
 		{} as Record<number, TemperatureData[]>
 	);
+	const currentYear = new Date().getFullYear();
 
 	const results = Object.entries(yearlyGroups)
 		.map(([year, yearData]) => {
 			// Filter data for the target month
-			const monthData = yearData.filter((day) => {
+			const monthData = yearData.filter((day: TemperatureData) => {
 				const date = parseISO(day.date);
 				return getMonth(date) === targetMonth;
 			});
@@ -369,7 +378,15 @@ export function calculateMonthlyTemperatureComparison(
 				heatwaveDays
 			};
 		})
-		.filter((item): item is TemperatureComparison => item !== null);
+		.filter((item): item is TemperatureComparison => {
+			if (item === null) return false;
+			// Include current year even if it has minimal data
+			if (item.year === currentYear) {
+				return true;
+			}
+			// For previous years, only include if there's meaningful data
+			return item !== null;
+		});
 
 	return results.sort((a, b) => a.year - b.year);
 }
@@ -913,7 +930,7 @@ export function calculateMonthlyWindComparison(
 	const results = Object.entries(yearlyGroups)
 		.map(([year, yearData]) => {
 			// Filter data for the target month
-			const monthData = yearData.filter((day) => {
+			const monthData = yearData.filter((day: WindData) => {
 				const date = parseISO(day.date);
 				return getMonth(date) === targetMonth;
 			});

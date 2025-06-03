@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { EnhancedStatistics } from '../../types.js';
+	import type { EnhancedStatistics } from '../../types';
 	import { format } from 'date-fns';
 
 	export let enhancedStats: EnhancedStatistics | null;
@@ -96,7 +96,7 @@
 		</div>
 
 		<!-- Seasonal Analysis -->
-		<div class="mb-6 rounded-lg bg-white p-6 shadow-sm">
+		<div class="mb-6 rounded-lg bg-white p-4 shadow-sm">
 			<div class="mb-6 flex items-center">
 				<div
 					class="mr-3 flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-green-400 to-blue-500"
@@ -261,7 +261,7 @@
 		</div>
 
 		<!-- Extreme Events -->
-		<div class="mb-6 rounded-lg bg-white p-6 shadow-sm">
+		<div class="mb-6 rounded-lg bg-white p-4 shadow-sm">
 			<h3 class="mb-4 text-xl font-semibold text-gray-800">Extreme Events (Top 5)</h3>
 			<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
 				<!-- Wettest Days -->
@@ -310,6 +310,23 @@
 						{/each}
 					</ul>
 				</div>
+
+				<!-- Driest Months -->
+				{#if enhancedStats.topDryestMonths && enhancedStats.topDryestMonths.length > 0}
+					<div>
+						<h4 class="mb-2 font-semibold text-gray-700">Driest Months</h4>
+						<ul class="space-y-1 text-sm">
+							{#each enhancedStats.topDryestMonths as month (`${month.year}-${month.month}`)}
+								<li class="flex justify-between rounded-md bg-amber-50 p-2">
+									<span>{month.month} {month.year}</span>
+									<span class="font-bold text-amber-700">{month.total.toFixed(1)} mm</span>
+								</li>
+							{:else}
+								<li class="text-gray-500">No data</li>
+							{/each}
+						</ul>
+					</div>
+				{/if}
 
 				<!-- Hottest Days -->
 				<div>

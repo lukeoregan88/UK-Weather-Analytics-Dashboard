@@ -335,12 +335,17 @@
 	$: availableMonths = (() => {
 		const months = [];
 		const now = new Date();
+		const currentYear = now.getFullYear();
 		const currentMonthIndex = now.getMonth();
 
+		// For the current year, only show months that have passed or are current
 		for (let i = 0; i <= currentMonthIndex; i++) {
-			const monthName = new Date(2024, i).toLocaleString('default', { month: 'long' });
+			const monthName = new Date(currentYear, i).toLocaleString('default', { month: 'long' });
 			months.push({ index: i, name: monthName });
 		}
+
+		// For previous years in monthly view, we should have access to all 12 months
+		// But for current year, we only show up to current month
 		return months;
 	})();
 
@@ -890,6 +895,11 @@
 				{/if}
 			</div>
 
+			<!-- Growing Insights Panel -->
+			{#if showSolarView}
+				<GrowingInsightsPanel {growingInsights} {solarEnergyInsights} />
+			{/if}
+
 			<!-- Yearly Comparison Cards -->
 			<YearlyComparisonPanel
 				{displayedComparison}
@@ -912,15 +922,156 @@
 				{windExtremes}
 				{droughtPeriods}
 				{temperatureExtremes}
+				temperatureAnomalies={{
+					hotAnomalies: temperatureData
+						.filter((d) => {
+							// Get last 90 days
+							const ninetyDaysAgo = new Date();
+							ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+							return new Date(d.date) >= ninetyDaysAgo;
+						})
+						.filter((d) => d.temperatureMax > 0) // Has temperature data
+						.map((d) => {
+							const avgTemp =
+								temperatureData
+									.filter((td) => {
+										const ninetyDaysAgo = new Date();
+										ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+										return new Date(td.date) >= ninetyDaysAgo;
+									})
+									.reduce((sum, td) => sum + td.temperatureMax, 0) /
+								temperatureData.filter((td) => {
+									const ninetyDaysAgo = new Date();
+									ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+									return new Date(td.date) >= ninetyDaysAgo;
+								}).length;
+
+							return {
+								date: d.date,
+								temperature: d.temperatureMax,
+								deviation: d.temperatureMax - avgTemp
+							};
+						})
+						.filter((d) => d.deviation >= 5) // 5°C+ above average
+						.sort((a, b) => b.deviation - a.deviation)
+						.slice(0, 10),
+					coldAnomalies: temperatureData
+						.filter((d) => {
+							// Get last 90 days
+							const ninetyDaysAgo = new Date();
+							ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+							return new Date(d.date) >= ninetyDaysAgo;
+						})
+						.filter((d) => d.temperatureMin !== undefined) // Has temperature data
+						.map((d) => {
+							const avgTemp =
+								temperatureData
+									.filter((td) => {
+										const ninetyDaysAgo = new Date();
+										ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+										return new Date(td.date) >= ninetyDaysAgo;
+									})
+									.reduce((sum, td) => sum + (td.temperatureMin || 0), 0) /
+								temperatureData.filter((td) => {
+									const ninetyDaysAgo = new Date();
+									ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+									return new Date(td.date) >= ninetyDaysAgo;
+								}).length;
+
+							return {
+								date: d.date,
+								temperature: d.temperatureMin || 0,
+								deviation: (d.temperatureMin || 0) - avgTemp
+							};
+						})
+						.filter((d) => d.deviation <= -5) // 5°C+ below average
+						.sort((a, b) => a.deviation - b.deviation)
+						.slice(0, 10),
+					averageTemperature:
+						temperatureData
+							.filter((d) => {
+								// Get last 90 days
+								const ninetyDaysAgo = new Date();
+								ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+								return new Date(d.date) >= ninetyDaysAgo;
+							})
+							.reduce((sum, d) => sum + (d.temperatureMax + (d.temperatureMin || 0)) / 2, 0) /
+							temperatureData.filter((d) => {
+								const ninetyDaysAgo = new Date();
+								ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+								return new Date(d.date) >= ninetyDaysAgo;
+							}).length || 0
+				}}
+				significantTemperatureEvents={{
+					recordHighs: temperatureData
+						.filter((d) => {
+							// Get last 90 days
+							const ninetyDaysAgo = new Date();
+							ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+							return new Date(d.date) >= ninetyDaysAgo;
+						})
+						.filter((d) => d.temperatureMax > 30) // Significant high temperatures
+						.sort((a, b) => b.temperatureMax - a.temperatureMax)
+						.slice(0, 8)
+						.map((d) => ({
+							date: d.date,
+							temperature: d.temperatureMax,
+							description:
+								d.temperatureMax > 35
+									? 'Exceptional heat'
+									: d.temperatureMax > 32
+										? 'Very hot day'
+										: 'Hot day'
+						})),
+					recordLows: temperatureData
+						.filter((d) => {
+							// Get last 90 days
+							const ninetyDaysAgo = new Date();
+							ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+							return new Date(d.date) >= ninetyDaysAgo;
+						})
+						.filter((d) => d.temperatureMin !== undefined && d.temperatureMin < 5) // Significant low temperatures
+						.sort((a, b) => (a.temperatureMin || 0) - (b.temperatureMin || 0))
+						.slice(0, 8)
+						.map((d) => ({
+							date: d.date,
+							temperature: d.temperatureMin || 0,
+							description:
+								(d.temperatureMin || 0) < -5
+									? 'Extreme cold'
+									: (d.temperatureMin || 0) < 0
+										? 'Freezing day'
+										: 'Cold day'
+						})),
+					temperatureSwings: temperatureData
+						.filter((d) => {
+							// Get last 90 days
+							const ninetyDaysAgo = new Date();
+							ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+							return new Date(d.date) >= ninetyDaysAgo;
+						})
+						.filter(
+							(d) =>
+								d.temperatureMin !== undefined && d.temperatureMax - (d.temperatureMin || 0) >= 15
+						) // 15°C+ daily range
+						.sort(
+							(a, b) =>
+								b.temperatureMax -
+								(b.temperatureMin || 0) -
+								(a.temperatureMax - (a.temperatureMin || 0))
+						)
+						.slice(0, 8)
+						.map((d) => ({
+							date: d.date,
+							minTemp: d.temperatureMin || 0,
+							maxTemp: d.temperatureMax,
+							range: d.temperatureMax - (d.temperatureMin || 0)
+						}))
+				}}
 			/>
 
 			<!-- Enhanced Statistics Section -->
 			<EnhancedStatisticsPanel {enhancedStats} {loadingData} />
-
-			<!-- Growing Insights Panel -->
-			{#if showSolarView}
-				<GrowingInsightsPanel {growingInsights} {solarEnergyInsights} />
-			{/if}
 		{/if}
 	</div>
 

@@ -10,6 +10,24 @@
 		heatWaves: [],
 		coldSnaps: []
 	};
+	export let temperatureAnomalies: {
+		hotAnomalies: any[];
+		coldAnomalies: any[];
+		averageTemperature: number;
+	} = {
+		hotAnomalies: [],
+		coldAnomalies: [],
+		averageTemperature: 0
+	};
+	export let significantTemperatureEvents: {
+		recordHighs: any[];
+		recordLows: any[];
+		temperatureSwings: any[];
+	} = {
+		recordHighs: [],
+		recordLows: [],
+		temperatureSwings: []
+	};
 </script>
 
 <!-- Wind Extremes Analysis -->
@@ -299,7 +317,317 @@
 {/if}
 
 <!-- Temperature Extremes Analysis -->
-{#if temperatureExtremes.heatWaves.length > 0 || temperatureExtremes.coldSnaps.length > 0}
+{#if showTemperatureView}
+	{#if temperatureExtremes.heatWaves.length > 0 || temperatureExtremes.coldSnaps.length > 0 || temperatureAnomalies.hotAnomalies.length > 0 || temperatureAnomalies.coldAnomalies.length > 0 || significantTemperatureEvents.recordHighs.length > 0 || significantTemperatureEvents.recordLows.length > 0 || significantTemperatureEvents.temperatureSwings.length > 0}
+		<div class="rounded-lg bg-white p-4 shadow-sm">
+			<div class="mb-4 flex items-center">
+				<div class="mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-red-100">
+					<svg class="h-5 w-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+						></path>
+					</svg>
+				</div>
+				<div>
+					<h3 class="text-lg font-semibold text-gray-900">Temperature Analysis</h3>
+					<p class="text-xs text-gray-600">Temperature patterns and extremes (last 90 days)</p>
+				</div>
+			</div>
+
+			<!-- Heat Waves -->
+			{#if temperatureExtremes.heatWaves.length > 0}
+				<div class="mb-4">
+					<h4 class="text-md mb-2 font-medium text-gray-900">Heat Waves (3+ days above 25°C)</h4>
+					<div class="grid gap-2 sm:grid-cols-1 lg:grid-cols-2">
+						{#each temperatureExtremes.heatWaves.slice(0, 4) as heatWave, index}
+							<div
+								class="group relative overflow-hidden rounded-lg border border-red-200 bg-gradient-to-r from-red-50 to-orange-50 p-2 transition-all duration-200 hover:border-red-300 hover:shadow-md"
+							>
+								<div class="flex items-start justify-between">
+									<div class="flex-1">
+										<div class="mb-1 flex items-center">
+											<div
+												class="mr-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-200 text-red-800"
+											>
+												<span class="text-xs font-bold">{index + 1}</span>
+											</div>
+											<div class="flex items-center text-red-700">
+												<span class="text-xs font-semibold">{heatWave.duration} days</span>
+											</div>
+										</div>
+										<p class="mb-1 text-xs font-medium text-gray-800">
+											Peak: {heatWave.maxTemp.toFixed(1)}°C
+										</p>
+										<div class="flex items-center text-xs text-gray-600">
+											<span>
+												{format(new Date(heatWave.start), 'dd MMM')} - {format(
+													new Date(heatWave.end),
+													'dd MMM yyyy'
+												)}
+											</span>
+										</div>
+									</div>
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			<!-- Cold Snaps -->
+			{#if temperatureExtremes.coldSnaps.length > 0}
+				<div class="mb-4">
+					<h4 class="text-md mb-2 font-medium text-gray-900">Cold Snaps (3+ days below -2°C)</h4>
+					<div class="grid gap-2 sm:grid-cols-1 lg:grid-cols-2">
+						{#each temperatureExtremes.coldSnaps.slice(0, 4) as coldSnap, index}
+							<div
+								class="group relative overflow-hidden rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-cyan-50 p-2 transition-all duration-200 hover:border-blue-300 hover:shadow-md"
+							>
+								<div class="flex items-start justify-between">
+									<div class="flex-1">
+										<div class="mb-1 flex items-center">
+											<div
+												class="mr-2 flex h-5 w-5 items-center justify-center rounded-full bg-blue-200 text-blue-800"
+											>
+												<span class="text-xs font-bold">{index + 1}</span>
+											</div>
+											<div class="flex items-center text-blue-700">
+												<span class="text-xs font-semibold">{coldSnap.duration} days</span>
+											</div>
+										</div>
+										<p class="mb-1 text-sm font-medium text-gray-800">
+											Low: {coldSnap.minTemp.toFixed(1)}°C
+										</p>
+										<div class="flex items-center text-xs text-gray-600">
+											<span>
+												{format(new Date(coldSnap.start), 'dd MMM')} - {format(
+													new Date(coldSnap.end),
+													'dd MMM yyyy'
+												)}
+											</span>
+										</div>
+									</div>
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			<!-- Temperature Anomalies -->
+			{#if temperatureAnomalies.hotAnomalies.length > 0 || temperatureAnomalies.coldAnomalies.length > 0}
+				<div class="mb-4">
+					<h4 class="text-md mb-2 font-medium text-gray-900">Temperature Anomalies</h4>
+					<div class="mb-3 rounded-lg bg-gray-50 p-3">
+						<div class="flex items-center justify-between text-sm">
+							<span class="text-gray-700">90-day average temperature:</span>
+							<span class="font-semibold text-gray-900"
+								>{temperatureAnomalies.averageTemperature.toFixed(1)}°C</span
+							>
+						</div>
+					</div>
+
+					<!-- Hot Anomalies -->
+					{#if temperatureAnomalies.hotAnomalies.length > 0}
+						<div class="mb-3">
+							<h5 class="mb-2 text-sm font-medium text-gray-800">
+								Unusually Hot Days (5°C+ above average)
+							</h5>
+							<div class="grid gap-2 sm:grid-cols-1 lg:grid-cols-3">
+								{#each temperatureAnomalies.hotAnomalies.slice(0, 6) as anomaly, index}
+									<div
+										class="rounded-lg border border-orange-200 bg-gradient-to-r from-orange-50 to-red-50 p-2"
+									>
+										<div class="flex items-center justify-between">
+											<div>
+												<p class="text-xs font-medium text-gray-800">
+													{anomaly.temperature.toFixed(1)}°C
+												</p>
+												<p class="text-xs text-gray-600">+{anomaly.deviation.toFixed(1)}°C</p>
+											</div>
+											<div class="text-xs text-gray-600">
+												{format(new Date(anomaly.date), 'dd MMM')}
+											</div>
+										</div>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
+					<!-- Cold Anomalies -->
+					{#if temperatureAnomalies.coldAnomalies.length > 0}
+						<div class="mb-3">
+							<h5 class="mb-2 text-sm font-medium text-gray-800">
+								Unusually Cold Days (5°C+ below average)
+							</h5>
+							<div class="grid gap-2 sm:grid-cols-1 lg:grid-cols-3">
+								{#each temperatureAnomalies.coldAnomalies.slice(0, 6) as anomaly, index}
+									<div
+										class="rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-cyan-50 p-2"
+									>
+										<div class="flex items-center justify-between">
+											<div>
+												<p class="text-xs font-medium text-gray-800">
+													{anomaly.temperature.toFixed(1)}°C
+												</p>
+												<p class="text-xs text-gray-600">{anomaly.deviation.toFixed(1)}°C</p>
+											</div>
+											<div class="text-xs text-gray-600">
+												{format(new Date(anomaly.date), 'dd MMM')}
+											</div>
+										</div>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+				</div>
+			{/if}
+
+			<!-- Significant Temperature Events -->
+			{#if significantTemperatureEvents.recordHighs.length > 0 || significantTemperatureEvents.recordLows.length > 0 || significantTemperatureEvents.temperatureSwings.length > 0}
+				<div class="mb-4">
+					<h4 class="text-md mb-2 font-medium text-gray-900">Significant Temperature Events</h4>
+
+					<!-- Record Highs -->
+					{#if significantTemperatureEvents.recordHighs.length > 0}
+						<div class="mb-3">
+							<h5 class="mb-2 text-sm font-medium text-gray-800">Notable High Temperatures</h5>
+							<div class="grid gap-2 sm:grid-cols-1 lg:grid-cols-2">
+								{#each significantTemperatureEvents.recordHighs.slice(0, 4) as record, index}
+									<div
+										class="rounded-lg border border-red-200 bg-gradient-to-r from-red-50 to-pink-50 p-3"
+									>
+										<div class="flex items-start justify-between">
+											<div class="flex-1">
+												<div class="mb-1 flex items-center">
+													<div
+														class="mr-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-200 text-red-800"
+													>
+														<span class="text-xs font-bold">{index + 1}</span>
+													</div>
+													<span class="text-sm font-semibold text-red-700"
+														>{record.temperature.toFixed(1)}°C</span
+													>
+												</div>
+												<p class="mb-1 text-xs text-gray-800">
+													{record.description || 'Daily high temperature'}
+												</p>
+												<div class="flex items-center text-xs text-gray-600">
+													<span>{format(new Date(record.date), 'dd MMM yyyy')}</span>
+												</div>
+											</div>
+										</div>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
+					<!-- Record Lows -->
+					{#if significantTemperatureEvents.recordLows.length > 0}
+						<div class="mb-3">
+							<h5 class="mb-2 text-sm font-medium text-gray-800">Notable Low Temperatures</h5>
+							<div class="grid gap-2 sm:grid-cols-1 lg:grid-cols-2">
+								{#each significantTemperatureEvents.recordLows.slice(0, 4) as record, index}
+									<div
+										class="rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-3"
+									>
+										<div class="flex items-start justify-between">
+											<div class="flex-1">
+												<div class="mb-1 flex items-center">
+													<div
+														class="mr-2 flex h-5 w-5 items-center justify-center rounded-full bg-blue-200 text-blue-800"
+													>
+														<span class="text-xs font-bold">{index + 1}</span>
+													</div>
+													<span class="text-sm font-semibold text-blue-700"
+														>{record.temperature.toFixed(1)}°C</span
+													>
+												</div>
+												<p class="mb-1 text-xs text-gray-800">
+													{record.description || 'Daily low temperature'}
+												</p>
+												<div class="flex items-center text-xs text-gray-600">
+													<span>{format(new Date(record.date), 'dd MMM yyyy')}</span>
+												</div>
+											</div>
+										</div>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
+					<!-- Temperature Swings -->
+					{#if significantTemperatureEvents.temperatureSwings.length > 0}
+						<div class="mb-3">
+							<h5 class="mb-2 text-sm font-medium text-gray-800">
+								Large Temperature Swings (15°C+ daily range)
+							</h5>
+							<div class="grid gap-2 sm:grid-cols-1 lg:grid-cols-2">
+								{#each significantTemperatureEvents.temperatureSwings.slice(0, 4) as swing, index}
+									<div
+										class="rounded-lg border border-purple-200 bg-gradient-to-r from-purple-50 to-pink-50 p-3"
+									>
+										<div class="flex items-start justify-between">
+											<div class="flex-1">
+												<div class="mb-1 flex items-center">
+													<div
+														class="mr-2 flex h-5 w-5 items-center justify-center rounded-full bg-purple-200 text-purple-800"
+													>
+														<span class="text-xs font-bold">{index + 1}</span>
+													</div>
+													<span class="text-sm font-semibold text-purple-700"
+														>{swing.range.toFixed(1)}°C range</span
+													>
+												</div>
+												<p class="mb-1 text-xs text-gray-800">
+													{swing.minTemp.toFixed(1)}°C to {swing.maxTemp.toFixed(1)}°C
+												</p>
+												<div class="flex items-center text-xs text-gray-600">
+													<span>{format(new Date(swing.date), 'dd MMM yyyy')}</span>
+												</div>
+											</div>
+										</div>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+				</div>
+			{/if}
+
+			{#if temperatureExtremes.heatWaves.length === 0 && temperatureExtremes.coldSnaps.length === 0 && temperatureAnomalies.hotAnomalies.length === 0 && temperatureAnomalies.coldAnomalies.length === 0 && significantTemperatureEvents.recordHighs.length === 0 && significantTemperatureEvents.recordLows.length === 0 && significantTemperatureEvents.temperatureSwings.length === 0}
+				<div class="py-8 text-center">
+					<div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+						<svg
+							class="h-6 w-6 text-green-600"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M5 13l4 4L19 7"
+							></path>
+						</svg>
+					</div>
+					<h4 class="mt-2 text-sm font-medium text-gray-900">No notable temperature events</h4>
+					<p class="mt-1 text-sm text-gray-500">
+						No significant temperature patterns or extremes in the last 90 days
+					</p>
+				</div>
+			{/if}
+		</div>
+	{/if}
+{:else if temperatureExtremes.heatWaves.length > 0 || temperatureExtremes.coldSnaps.length > 0}
 	<div class="rounded-lg bg-white p-4 shadow-sm">
 		<div class="mb-4 flex items-center">
 			<div class="mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-red-100">

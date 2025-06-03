@@ -7,7 +7,7 @@
 </script>
 
 {#if growingInsights}
-	<div class="rounded-lg bg-white p-4 shadow-sm">
+	<div class="mb-4 rounded-lg bg-white p-4 shadow-sm">
 		<div class="mb-4 flex items-center">
 			<div class="mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-green-100">
 				<i class="fa-solid fa-seedling text-green-600"></i>
