@@ -34,7 +34,7 @@
 				</p>
 				<p class="mt-2 text-gray-500">
 					<a
-						href="https://github.com/lukeoregan/rainfall-dashboard"
+						href="https://github.com/lukeoregan88/UK-Weather-Analytics-Dashboard"
 						target="_blank"
 						rel="noopener noreferrer"
 						class="text-blue-600 underline hover:text-blue-800">View source code on GitHub</a
