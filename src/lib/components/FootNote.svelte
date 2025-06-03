@@ -16,6 +16,10 @@
 					- Open-source weather API with historical data from 1940-present
 				</p>
 				<p>
+					<strong>Rate Limiting:</strong> Rate limiting implemented to respect Open-Meteo's API
+					limits - <strong>100 calls/minute</strong>
+				</p>
+				<p>
 					<strong>Location Data:</strong> UK postcode geocoding provided by
 					<a
 						href="https://postcodes.io/"

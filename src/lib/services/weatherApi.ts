@@ -11,6 +11,115 @@ import { format } from 'date-fns';
 import { cacheService } from './cacheService.js';
 
 /**
+ * Rate limiter to manage API calls and respect Open-Meteo's limits
+ */
+class RateLimiter {
+	private queue: (() => Promise<unknown>)[] = [];
+	private currentCalls = 0;
+	private startTime = Date.now();
+	private isProcessing = false;
+	private readonly minutelyLimit = 100; // Conservative limit: 100 calls per minute
+
+	/**
+	 * Add a request function to the queue
+	 */
+	async add<T>(requestFunction: () => Promise<T>): Promise<T> {
+		return new Promise((resolve, reject) => {
+			this.queue.push(async () => {
+				try {
+					const result = await requestFunction();
+					resolve(result);
+				} catch (error) {
+					reject(error);
+				}
+			});
+			this.processQueue();
+		});
+	}
+
+	/**
+	 * Process the queue of requests while respecting rate limits
+	 */
+	private async processQueue(): Promise<void> {
+		if (this.isProcessing || this.queue.length === 0) {
+			return;
+		}
+
+		this.isProcessing = true;
+
+		while (this.queue.length > 0) {
+			const now = Date.now();
+			const elapsedTime = now - this.startTime;
+
+			// Reset the call count every minute
+			if (elapsedTime >= 60000) {
+				this.currentCalls = 0;
+				this.startTime = now;
+				console.log('Rate limiter: Reset call count for new minute');
+			}
+
+			// If we are under the limit, process the next request
+			if (this.currentCalls < this.minutelyLimit) {
+				const requestFunction = this.queue.shift();
+				if (requestFunction) {
+					this.currentCalls++;
+					console.log(
+						`Rate limiter: Processing request ${this.currentCalls}/${this.minutelyLimit}`
+					);
+					await requestFunction();
+
+					// Small delay between requests to spread them out
+					if (this.queue.length > 0) {
+						await this.delay(600); // 600ms delay = 100 requests per minute max
+					}
+				}
+			} else {
+				// If limit reached, wait until the next minute
+				const waitTime = 60000 - elapsedTime;
+				console.log(
+					`Rate limiter: Limit reached, waiting ${Math.round(waitTime / 1000)}s until next minute`
+				);
+				await this.delay(waitTime);
+			}
+		}
+
+		this.isProcessing = false;
+	}
+
+	/**
+	 * Delay utility function
+	 */
+	private delay(ms: number): Promise<void> {
+		return new Promise((resolve) => setTimeout(resolve, ms));
+	}
+
+	/**
+	 * Get current rate limiter statistics
+	 */
+	getStats(): { currentCalls: number; limit: number; resetTime: number } {
+		const now = Date.now();
+		const elapsedTime = now - this.startTime;
+		const resetTime = 60000 - elapsedTime;
+
+		return {
+			currentCalls: this.currentCalls,
+			limit: this.minutelyLimit,
+			resetTime: Math.max(0, resetTime)
+		};
+	}
+}
+
+// Create a singleton rate limiter instance
+const rateLimiter = new RateLimiter();
+
+/**
+ * Export rate limiter stats for monitoring
+ */
+export function getRateLimiterStats() {
+	return rateLimiter.getStats();
+}
+
+/**
  * Get coordinates from UK postcode using postcodes.io API
  */
 export async function getLocationFromPostcode(postcode: string): Promise<Location> {
@@ -78,41 +187,50 @@ export async function getHistoricalRainfall(
 	);
 	url.searchParams.set('timezone', 'Europe/London');
 
-	try {
-		console.log('Fetching weather data from:', url.toString());
-		const response = await fetch(url.toString());
+	// Use rate limiter for the API call
+	return rateLimiter.add(async () => {
+		try {
+			console.log('Fetching weather data from:', url.toString());
+			const response = await fetch(url.toString());
 
-		if (!response.ok) {
-			const errorText = await response.text();
-			console.error('Weather API error:', response.status, errorText);
-			throw new Error(`Weather API error: ${response.status} - ${errorText}`);
+			if (!response.ok) {
+				const errorText = await response.text();
+				console.error('Weather API error:', response.status, errorText);
+				throw new Error(`Weather API error: ${response.status} - ${errorText}`);
+			}
+
+			const data: WeatherApiResponse = await response.json();
+
+			if (!data.daily || !data.daily.time) {
+				throw new Error('Invalid response format from weather API');
+			}
+
+			const rainfallData = data.daily.time.map((date, index) => ({
+				date,
+				rainfall: data.daily.precipitation_sum[index] || 0,
+				temperature: data.daily.temperature_2m_mean?.[index],
+				temperatureMin: data.daily.temperature_2m_min?.[index],
+				temperatureMax: data.daily.temperature_2m_max?.[index],
+				humidity: undefined
+			}));
+
+			// Cache the result for 24 hours
+			cacheService.setWithDateRange(
+				latitude,
+				longitude,
+				'historical_raw',
+				start,
+				end,
+				rainfallData,
+				{ ttl: 24 * 60 * 60 * 1000 }
+			);
+
+			return rainfallData;
+		} catch (error) {
+			console.error('Weather API fetch error:', error);
+			throw new Error(`Failed to fetch weather data: ${error}`);
 		}
-
-		const data: WeatherApiResponse = await response.json();
-
-		if (!data.daily || !data.daily.time) {
-			throw new Error('Invalid response format from weather API');
-		}
-
-		const rainfallData = data.daily.time.map((date, index) => ({
-			date,
-			rainfall: data.daily.precipitation_sum[index] || 0,
-			temperature: data.daily.temperature_2m_mean?.[index],
-			temperatureMin: data.daily.temperature_2m_min?.[index],
-			temperatureMax: data.daily.temperature_2m_max?.[index],
-			humidity: undefined
-		}));
-
-		// Cache the result for 24 hours
-		cacheService.setWithDateRange(latitude, longitude, 'historical_raw', start, end, rainfallData, {
-			ttl: 24 * 60 * 60 * 1000
-		});
-
-		return rainfallData;
-	} catch (error) {
-		console.error('Weather API fetch error:', error);
-		throw new Error(`Failed to fetch weather data: ${error}`);
-	}
+	});
 }
 
 /**
@@ -157,77 +275,80 @@ export async function getComprehensiveHistoricalData(
 	);
 	url.searchParams.set('timezone', 'Europe/London');
 
-	try {
-		console.log('Fetching comprehensive weather data from:', url.toString());
-		const response = await fetch(url.toString());
+	// Use rate limiter for the API call
+	return rateLimiter.add(async () => {
+		try {
+			console.log('Fetching comprehensive weather data from:', url.toString());
+			const response = await fetch(url.toString());
 
-		if (!response.ok) {
-			const errorText = await response.text();
-			console.error('Comprehensive weather API error:', response.status, errorText);
-			throw new Error(`Weather API error: ${response.status} - ${errorText}`);
-		}
+			if (!response.ok) {
+				const errorText = await response.text();
+				console.error('Comprehensive weather API error:', response.status, errorText);
+				throw new Error(`Weather API error: ${response.status} - ${errorText}`);
+			}
 
-		const data: WeatherApiResponse = await response.json();
+			const data: WeatherApiResponse = await response.json();
 
-		if (!data.daily || !data.daily.time) {
-			throw new Error('Invalid response format from weather API');
-		}
+			if (!data.daily || !data.daily.time) {
+				throw new Error('Invalid response format from weather API');
+			}
 
-		// Process all data types from single API response
-		const rainfall: RainfallData[] = data.daily.time.map((date, index) => ({
-			date,
-			rainfall: data.daily.precipitation_sum[index] || 0,
-			temperature: data.daily.temperature_2m_mean?.[index],
-			temperatureMin: data.daily.temperature_2m_min?.[index],
-			temperatureMax: data.daily.temperature_2m_max?.[index],
-			humidity: undefined
-		}));
-
-		const temperature: TemperatureData[] = data.daily.time
-			.map((date, index) => ({
+			// Process all data types from single API response
+			const rainfall: RainfallData[] = data.daily.time.map((date, index) => ({
 				date,
+				rainfall: data.daily.precipitation_sum[index] || 0,
 				temperature: data.daily.temperature_2m_mean?.[index],
 				temperatureMin: data.daily.temperature_2m_min?.[index],
-				temperatureMax: data.daily.temperature_2m_max?.[index]
-			}))
-			.filter(
-				(d) =>
-					d.temperature !== undefined &&
-					d.temperatureMin !== undefined &&
-					d.temperatureMax !== undefined
-			) as TemperatureData[];
+				temperatureMax: data.daily.temperature_2m_max?.[index],
+				humidity: undefined
+			}));
 
-		const wind: WindData[] = data.daily.time
-			.map((date, index) => ({
-				date,
-				windSpeed: data.daily.wind_speed_10m_mean?.[index] || 0,
-				windDirection: data.daily.wind_direction_10m_dominant?.[index] || 0,
-				windGusts: data.daily.wind_gusts_10m_max?.[index] || 0
-			}))
-			.filter((d) => d.windSpeed !== null && d.windDirection !== null && d.windGusts !== null);
+			const temperature: TemperatureData[] = data.daily.time
+				.map((date, index) => ({
+					date,
+					temperature: data.daily.temperature_2m_mean?.[index],
+					temperatureMin: data.daily.temperature_2m_min?.[index],
+					temperatureMax: data.daily.temperature_2m_max?.[index]
+				}))
+				.filter(
+					(d) =>
+						d.temperature !== undefined &&
+						d.temperatureMin !== undefined &&
+						d.temperatureMax !== undefined
+				) as TemperatureData[];
 
-		const solar: SolarData[] = data.daily.time
-			.map((date, index) => ({
-				date,
-				solarRadiation: data.daily.shortwave_radiation_sum?.[index] || 0,
-				solarRadiationSum: data.daily.shortwave_radiation_sum?.[index] || 0,
-				uvIndex: undefined,
-				sunshineDuration: data.daily.sunshine_duration?.[index]
-			}))
-			.filter((d) => d.solarRadiation !== null);
+			const wind: WindData[] = data.daily.time
+				.map((date, index) => ({
+					date,
+					windSpeed: data.daily.wind_speed_10m_mean?.[index] || 0,
+					windDirection: data.daily.wind_direction_10m_dominant?.[index] || 0,
+					windGusts: data.daily.wind_gusts_10m_max?.[index] || 0
+				}))
+				.filter((d) => d.windSpeed !== null && d.windDirection !== null && d.windGusts !== null);
 
-		const comprehensiveData = { rainfall, temperature, wind, solar };
+			const solar: SolarData[] = data.daily.time
+				.map((date, index) => ({
+					date,
+					solarRadiation: data.daily.shortwave_radiation_sum?.[index] || 0,
+					solarRadiationSum: data.daily.shortwave_radiation_sum?.[index] || 0,
+					uvIndex: undefined,
+					sunshineDuration: data.daily.sunshine_duration?.[index]
+				}))
+				.filter((d) => d.solarRadiation !== null);
 
-		// Cache the comprehensive result
-		cacheService.setWithDateRange(latitude, longitude, cacheKey, start, end, comprehensiveData, {
-			ttl: 24 * 60 * 60 * 1000
-		});
+			const comprehensiveData = { rainfall, temperature, wind, solar };
 
-		return comprehensiveData;
-	} catch (error) {
-		console.error('Comprehensive weather API fetch error:', error);
-		throw new Error(`Failed to fetch comprehensive weather data: ${error}`);
-	}
+			// Cache the comprehensive result
+			cacheService.setWithDateRange(latitude, longitude, cacheKey, start, end, comprehensiveData, {
+				ttl: 24 * 60 * 60 * 1000
+			});
+
+			return comprehensiveData;
+		} catch (error) {
+			console.error('Comprehensive weather API fetch error:', error);
+			throw new Error(`Failed to fetch comprehensive weather data: ${error}`);
+		}
+	});
 }
 
 /**
@@ -254,22 +375,25 @@ export async function getCurrentWeather(latitude: number, longitude: number) {
 	url.searchParams.set('timezone', 'Europe/London');
 	url.searchParams.set('forecast_days', '1');
 
-	try {
-		const response = await fetch(url.toString());
+	// Use rate limiter for the API call
+	return rateLimiter.add(async () => {
+		try {
+			const response = await fetch(url.toString());
 
-		if (!response.ok) {
-			throw new Error(`Current weather API error: ${response.status}`);
+			if (!response.ok) {
+				throw new Error(`Current weather API error: ${response.status}`);
+			}
+
+			const data = await response.json();
+
+			// Cache current weather for 1 hour
+			cacheService.set(latitude, longitude, 'current_weather', data, { ttl: 60 * 60 * 1000 });
+
+			return data;
+		} catch (error) {
+			throw new Error(`Failed to fetch current weather: ${error}`);
 		}
-
-		const data = await response.json();
-
-		// Cache current weather for 1 hour
-		cacheService.set(latitude, longitude, 'current_weather', data, { ttl: 60 * 60 * 1000 });
-
-		return data;
-	} catch (error) {
-		throw new Error(`Failed to fetch current weather: ${error}`);
-	}
+	});
 }
 
 /**
@@ -445,38 +569,41 @@ export async function getTenYearWindData(latitude: number, longitude: number): P
 		);
 		url.searchParams.set('timezone', 'Europe/London');
 
-		try {
-			console.log('Fetching wind data from:', url.toString());
-			const response = await fetch(url.toString());
+		// Use rate limiter for fallback API call
+		return rateLimiter.add(async () => {
+			try {
+				console.log('Fetching wind data from:', url.toString());
+				const response = await fetch(url.toString());
 
-			if (!response.ok) {
-				const errorText = await response.text();
-				console.error('Wind API error:', response.status, errorText);
-				throw new Error(`Wind API error: ${response.status} - ${errorText}`);
+				if (!response.ok) {
+					const errorText = await response.text();
+					console.error('Wind API error:', response.status, errorText);
+					throw new Error(`Wind API error: ${response.status} - ${errorText}`);
+				}
+
+				const data: WeatherApiResponse = await response.json();
+
+				if (!data.daily || !data.daily.time) {
+					throw new Error('Invalid response format from wind API');
+				}
+
+				const windData: WindData[] = data.daily.time
+					.map((date, index) => ({
+						date,
+						windSpeed: data.daily.wind_speed_10m_mean?.[index] || 0,
+						windDirection: data.daily.wind_direction_10m_dominant?.[index] || 0,
+						windGusts: data.daily.wind_gusts_10m_max?.[index] || 0
+					}))
+					.filter((d) => d.windSpeed !== null && d.windDirection !== null && d.windGusts !== null);
+
+				// Cache the result
+				cacheService.set(latitude, longitude, 'wind_historical', windData);
+				return windData;
+			} catch (fetchError) {
+				console.error('Wind API fetch error:', fetchError);
+				throw new Error(`Failed to fetch wind data: ${fetchError}`);
 			}
-
-			const data: WeatherApiResponse = await response.json();
-
-			if (!data.daily || !data.daily.time) {
-				throw new Error('Invalid response format from wind API');
-			}
-
-			const windData: WindData[] = data.daily.time
-				.map((date, index) => ({
-					date,
-					windSpeed: data.daily.wind_speed_10m_mean?.[index] || 0,
-					windDirection: data.daily.wind_direction_10m_dominant?.[index] || 0,
-					windGusts: data.daily.wind_gusts_10m_max?.[index] || 0
-				}))
-				.filter((d) => d.windSpeed !== null && d.windDirection !== null && d.windGusts !== null);
-
-			// Cache the result
-			cacheService.set(latitude, longitude, 'wind_historical', windData);
-			return windData;
-		} catch (fetchError) {
-			console.error('Wind API fetch error:', fetchError);
-			throw new Error(`Failed to fetch wind data: ${fetchError}`);
-		}
+		});
 	}
 }
 
@@ -528,38 +655,41 @@ export async function getTenYearSolarData(
 		url.searchParams.set('daily', 'shortwave_radiation_sum,sunshine_duration');
 		url.searchParams.set('timezone', 'Europe/London');
 
-		try {
-			console.log('Fetching solar data from:', url.toString());
-			const response = await fetch(url.toString());
+		// Use rate limiter for fallback API call
+		return rateLimiter.add(async () => {
+			try {
+				console.log('Fetching solar data from:', url.toString());
+				const response = await fetch(url.toString());
 
-			if (!response.ok) {
-				const errorText = await response.text();
-				console.error('Solar API error:', response.status, errorText);
-				throw new Error(`Solar API error: ${response.status} - ${errorText}`);
+				if (!response.ok) {
+					const errorText = await response.text();
+					console.error('Solar API error:', response.status, errorText);
+					throw new Error(`Solar API error: ${response.status} - ${errorText}`);
+				}
+
+				const data: WeatherApiResponse = await response.json();
+
+				if (!data.daily || !data.daily.time) {
+					throw new Error('Invalid response format from solar API');
+				}
+
+				const solarData: SolarData[] = data.daily.time
+					.map((date, index) => ({
+						date,
+						solarRadiation: data.daily.shortwave_radiation_sum?.[index] || 0,
+						solarRadiationSum: data.daily.shortwave_radiation_sum?.[index] || 0,
+						uvIndex: undefined, // No UV Index data
+						sunshineDuration: data.daily.sunshine_duration?.[index]
+					}))
+					.filter((d) => d.solarRadiation !== null);
+
+				// Cache the result
+				cacheService.set(latitude, longitude, 'solar_historical', solarData);
+				return solarData;
+			} catch (fetchError) {
+				console.error('Solar API fetch error:', fetchError);
+				throw new Error(`Failed to fetch solar data: ${fetchError}`);
 			}
-
-			const data: WeatherApiResponse = await response.json();
-
-			if (!data.daily || !data.daily.time) {
-				throw new Error('Invalid response format from solar API');
-			}
-
-			const solarData: SolarData[] = data.daily.time
-				.map((date, index) => ({
-					date,
-					solarRadiation: data.daily.shortwave_radiation_sum?.[index] || 0,
-					solarRadiationSum: data.daily.shortwave_radiation_sum?.[index] || 0,
-					uvIndex: undefined, // No UV Index data
-					sunshineDuration: data.daily.sunshine_duration?.[index]
-				}))
-				.filter((d) => d.solarRadiation !== null);
-
-			// Cache the result
-			cacheService.set(latitude, longitude, 'solar_historical', solarData);
-			return solarData;
-		} catch (fetchError) {
-			console.error('Solar API fetch error:', fetchError);
-			throw new Error(`Failed to fetch solar data: ${fetchError}`);
-		}
+		});
 	}
 }

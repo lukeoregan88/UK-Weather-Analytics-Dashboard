@@ -38,7 +38,8 @@
 		getCurrentWeather,
 		getTenYearTemperatureData,
 		getTenYearWindData,
-		getTenYearSolarData
+		getTenYearSolarData,
+		getRateLimiterStats
 	} from '../services/weatherApi.js';
 	import {
 		calculateYearlyComparison,
@@ -94,6 +95,11 @@
 		totalSize: 0,
 		oldestEntry: null,
 		typeBreakdown: {}
+	};
+	let rateLimiterStats: { currentCalls: number; limit: number; resetTime: number } = {
+		currentCalls: 0,
+		limit: 0,
+		resetTime: 0
 	};
 	let showCacheInfo = false;
 
@@ -250,6 +256,10 @@
 		cacheStats = cacheService.getStats();
 	}
 
+	function updateRateLimiterStats() {
+		rateLimiterStats = getRateLimiterStats();
+	}
+
 	function clearCache() {
 		if (location) {
 			cacheService.clearLocation(location.latitude, location.longitude);
@@ -274,6 +284,14 @@
 			postcode = savedPostcode;
 		}
 		updateCacheStats();
+		updateRateLimiterStats();
+
+		// Update rate limiter stats every 5 seconds
+		const interval = setInterval(() => {
+			updateRateLimiterStats();
+		}, 5000);
+
+		return () => clearInterval(interval);
 	});
 
 	$: currentYear = new Date().getFullYear();
@@ -472,6 +490,39 @@
 
 			{#if showCacheInfo}
 				<div class="mt-2 rounded-md bg-gray-50 p-2">
+					<!-- Rate Limiter Stats -->
+					<div class="mb-3 border-b border-gray-200 pb-2">
+						<div class="mb-1 text-xs font-medium text-gray-700">API Rate Limiting:</div>
+						<div class="grid grid-cols-1 gap-1 text-xs text-gray-600 sm:grid-cols-3">
+							<div>
+								<span class="font-medium">Current calls:</span>
+								{rateLimiterStats.currentCalls}/{rateLimiterStats.limit}
+							</div>
+							<div>
+								<span class="font-medium">Reset in:</span>
+								{Math.ceil(rateLimiterStats.resetTime / 1000)}s
+							</div>
+							<div class="flex items-center">
+								<span class="font-medium">Status:</span>
+								<span
+									class="ml-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {rateLimiterStats.currentCalls <
+									rateLimiterStats.limit * 0.8
+										? 'bg-green-100 text-green-800'
+										: rateLimiterStats.currentCalls < rateLimiterStats.limit
+											? 'bg-yellow-100 text-yellow-800'
+											: 'bg-red-100 text-red-800'}"
+								>
+									{rateLimiterStats.currentCalls < rateLimiterStats.limit * 0.8
+										? 'Good'
+										: rateLimiterStats.currentCalls < rateLimiterStats.limit
+											? 'Caution'
+											: 'Limited'}
+								</span>
+							</div>
+						</div>
+					</div>
+
+					<!-- Cache Stats -->
 					<div class="grid grid-cols-1 gap-1 text-xs text-gray-600 sm:grid-cols-3">
 						<div>
 							<span class="font-medium">Cached entries:</span>
@@ -504,6 +555,7 @@
 					<p class="mt-1 text-xs text-gray-500">
 						Data is cached for 24 hours (historical), 6 hours (current year), and 1 hour (current
 						weather) to reduce API calls. Comprehensive data fetching reduces redundant requests.
+						Rate limiting: {rateLimiterStats.limit} calls/minute.
 					</p>
 				</div>
 			{/if}
