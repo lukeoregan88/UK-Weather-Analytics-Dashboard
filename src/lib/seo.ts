@@ -10,11 +10,11 @@ export interface SEOData {
 }
 
 export const defaultSEO: SEOData = {
-	title: 'UK Rainfall Analysis Dashboard | Historical Weather Data & Current Conditions',
+	title: 'UK Weather Analytics Dashboard | Comprehensive Weather Data & Climate Analysis',
 	description:
-		'Comprehensive UK rainfall analysis dashboard featuring historical weather patterns, current conditions, and detailed precipitation data for any UK location. Interactive maps and charts powered by real-time meteorological data.',
+		'Advanced UK weather analytics dashboard featuring rainfall, temperature, wind, and solar data analysis. Historical weather patterns, current conditions, and detailed meteorological insights for any UK location with interactive charts and real-time data.',
 	keywords:
-		'UK rainfall, weather analysis, precipitation data, historical weather, UK weather dashboard, rainfall patterns, meteorological data, weather charts, UK climate data',
+		'UK weather, weather analytics, rainfall analysis, temperature data, wind analysis, solar radiation, weather dashboard, climate data, historical weather, meteorological data, weather charts, UK weather patterns, weather intelligence, environmental data',
 	canonical: 'https://your-domain.com',
 	ogImage: 'https://your-domain.com/og-image.png',
 	ogType: 'website',

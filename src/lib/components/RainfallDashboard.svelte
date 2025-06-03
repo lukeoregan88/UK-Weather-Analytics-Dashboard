@@ -377,9 +377,10 @@
 	<div class="mx-auto max-w-7xl">
 		<!-- Header -->
 		<div class="mt-4 mb-4 rounded-lg bg-white p-4 shadow-sm">
-			<h1 class="mb-2 text-2xl font-bold text-gray-900">UK Rainfall Analysis Dashboard</h1>
+			<h1 class="mb-2 text-2xl font-bold text-gray-900">UK Weather Analytics Dashboard</h1>
 			<p class="mb-4 text-sm text-gray-600">
-				Analyse historical rainfall patterns and current conditions for any UK location
+				Comprehensive weather analysis including rainfall, temperature, wind, and solar data for any
+				UK location
 			</p>
 
 			<!-- Search -->
