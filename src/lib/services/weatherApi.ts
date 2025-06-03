@@ -44,6 +44,7 @@ export async function getLocationFromPostcode(postcode: string): Promise<Locatio
 
 /**
  * Get historical rainfall and temperature data using Open-Meteo API
+ * This function now caches results based on date range to avoid redundant calls
  */
 export async function getHistoricalRainfall(
 	latitude: number,
@@ -53,6 +54,18 @@ export async function getHistoricalRainfall(
 ): Promise<RainfallData[]> {
 	const start = format(startDate, 'yyyy-MM-dd');
 	const end = format(endDate, 'yyyy-MM-dd');
+
+	// Check cache first using date range
+	const cached = cacheService.getWithDateRange<RainfallData[]>(
+		latitude,
+		longitude,
+		'historical_raw',
+		start,
+		end
+	);
+	if (cached) {
+		return cached;
+	}
 
 	const url = new URL('https://archive-api.open-meteo.com/v1/archive');
 	url.searchParams.set('latitude', latitude.toString());
@@ -81,7 +94,7 @@ export async function getHistoricalRainfall(
 			throw new Error('Invalid response format from weather API');
 		}
 
-		return data.daily.time.map((date, index) => ({
+		const rainfallData = data.daily.time.map((date, index) => ({
 			date,
 			rainfall: data.daily.precipitation_sum[index] || 0,
 			temperature: data.daily.temperature_2m_mean?.[index],
@@ -89,9 +102,131 @@ export async function getHistoricalRainfall(
 			temperatureMax: data.daily.temperature_2m_max?.[index],
 			humidity: undefined
 		}));
+
+		// Cache the result for 24 hours
+		cacheService.setWithDateRange(latitude, longitude, 'historical_raw', start, end, rainfallData, {
+			ttl: 24 * 60 * 60 * 1000
+		});
+
+		return rainfallData;
 	} catch (error) {
 		console.error('Weather API fetch error:', error);
 		throw new Error(`Failed to fetch weather data: ${error}`);
+	}
+}
+
+/**
+ * Consolidated function to get comprehensive historical weather data
+ * This reduces API calls by fetching all data types in a single request
+ */
+export async function getComprehensiveHistoricalData(
+	latitude: number,
+	longitude: number,
+	startDate: Date,
+	endDate: Date
+): Promise<{
+	rainfall: RainfallData[];
+	temperature: TemperatureData[];
+	wind: WindData[];
+	solar: SolarData[];
+}> {
+	const start = format(startDate, 'yyyy-MM-dd');
+	const end = format(endDate, 'yyyy-MM-dd');
+
+	// Check if we have cached comprehensive data
+	const cacheKey = `comprehensive_${start}_${end}`;
+	const cached = cacheService.getWithDateRange<{
+		rainfall: RainfallData[];
+		temperature: TemperatureData[];
+		wind: WindData[];
+		solar: SolarData[];
+	}>(latitude, longitude, cacheKey, start, end);
+
+	if (cached) {
+		return cached;
+	}
+
+	const url = new URL('https://archive-api.open-meteo.com/v1/archive');
+	url.searchParams.set('latitude', latitude.toString());
+	url.searchParams.set('longitude', longitude.toString());
+	url.searchParams.set('start_date', start);
+	url.searchParams.set('end_date', end);
+	url.searchParams.set(
+		'daily',
+		'precipitation_sum,temperature_2m_mean,temperature_2m_min,temperature_2m_max,wind_speed_10m_mean,wind_direction_10m_dominant,wind_gusts_10m_max,shortwave_radiation_sum,sunshine_duration'
+	);
+	url.searchParams.set('timezone', 'Europe/London');
+
+	try {
+		console.log('Fetching comprehensive weather data from:', url.toString());
+		const response = await fetch(url.toString());
+
+		if (!response.ok) {
+			const errorText = await response.text();
+			console.error('Comprehensive weather API error:', response.status, errorText);
+			throw new Error(`Weather API error: ${response.status} - ${errorText}`);
+		}
+
+		const data: WeatherApiResponse = await response.json();
+
+		if (!data.daily || !data.daily.time) {
+			throw new Error('Invalid response format from weather API');
+		}
+
+		// Process all data types from single API response
+		const rainfall: RainfallData[] = data.daily.time.map((date, index) => ({
+			date,
+			rainfall: data.daily.precipitation_sum[index] || 0,
+			temperature: data.daily.temperature_2m_mean?.[index],
+			temperatureMin: data.daily.temperature_2m_min?.[index],
+			temperatureMax: data.daily.temperature_2m_max?.[index],
+			humidity: undefined
+		}));
+
+		const temperature: TemperatureData[] = data.daily.time
+			.map((date, index) => ({
+				date,
+				temperature: data.daily.temperature_2m_mean?.[index],
+				temperatureMin: data.daily.temperature_2m_min?.[index],
+				temperatureMax: data.daily.temperature_2m_max?.[index]
+			}))
+			.filter(
+				(d) =>
+					d.temperature !== undefined &&
+					d.temperatureMin !== undefined &&
+					d.temperatureMax !== undefined
+			) as TemperatureData[];
+
+		const wind: WindData[] = data.daily.time
+			.map((date, index) => ({
+				date,
+				windSpeed: data.daily.wind_speed_10m_mean?.[index] || 0,
+				windDirection: data.daily.wind_direction_10m_dominant?.[index] || 0,
+				windGusts: data.daily.wind_gusts_10m_max?.[index] || 0
+			}))
+			.filter((d) => d.windSpeed !== null && d.windDirection !== null && d.windGusts !== null);
+
+		const solar: SolarData[] = data.daily.time
+			.map((date, index) => ({
+				date,
+				solarRadiation: data.daily.shortwave_radiation_sum?.[index] || 0,
+				solarRadiationSum: data.daily.shortwave_radiation_sum?.[index] || 0,
+				uvIndex: undefined,
+				sunshineDuration: data.daily.sunshine_duration?.[index]
+			}))
+			.filter((d) => d.solarRadiation !== null);
+
+		const comprehensiveData = { rainfall, temperature, wind, solar };
+
+		// Cache the comprehensive result
+		cacheService.setWithDateRange(latitude, longitude, cacheKey, start, end, comprehensiveData, {
+			ttl: 24 * 60 * 60 * 1000
+		});
+
+		return comprehensiveData;
+	} catch (error) {
+		console.error('Comprehensive weather API fetch error:', error);
+		throw new Error(`Failed to fetch comprehensive weather data: ${error}`);
 	}
 }
 
@@ -139,6 +274,7 @@ export async function getCurrentWeather(latitude: number, longitude: number) {
 
 /**
  * Get rainfall data for the last 10 years using the archive API
+ * Now uses comprehensive data function to reduce API calls
  */
 export async function getTenYearRainfallData(
 	latitude: number,
@@ -154,12 +290,29 @@ export async function getTenYearRainfallData(
 	const startDate = new Date(currentYear - 10, 0, 1); // 10 years ago, January 1st
 	const endDate = new Date(); // Today
 
-	const data = await getHistoricalRainfall(latitude, longitude, startDate, endDate);
+	// Use comprehensive data function or fallback to rainfall-specific
+	try {
+		const comprehensiveData = await getComprehensiveHistoricalData(
+			latitude,
+			longitude,
+			startDate,
+			endDate
+		);
+		const data = comprehensiveData.rainfall;
 
-	// Cache the result
-	cacheService.set(latitude, longitude, 'historical', data);
-
-	return data;
+		// Cache the result
+		cacheService.set(latitude, longitude, 'historical', data);
+		return data;
+	} catch (comprehensiveError) {
+		// Fallback to original method
+		console.warn(
+			'Comprehensive data fetch failed, falling back to rainfall-only:',
+			comprehensiveError
+		);
+		const data = await getHistoricalRainfall(latitude, longitude, startDate, endDate);
+		cacheService.set(latitude, longitude, 'historical', data);
+		return data;
+	}
 }
 
 /**
@@ -189,6 +342,7 @@ export async function getCurrentYearRainfall(
 
 /**
  * Get temperature data for the last 10 years
+ * Now uses comprehensive data function to reduce API calls
  */
 export async function getTenYearTemperatureData(
 	latitude: number,
@@ -204,30 +358,48 @@ export async function getTenYearTemperatureData(
 	const startDate = new Date(currentYear - 10, 0, 1);
 	const endDate = new Date();
 
-	const rainfallData = await getHistoricalRainfall(latitude, longitude, startDate, endDate);
+	// Use comprehensive data function
+	try {
+		const comprehensiveData = await getComprehensiveHistoricalData(
+			latitude,
+			longitude,
+			startDate,
+			endDate
+		);
+		const temperatureData = comprehensiveData.temperature;
 
-	const temperatureData: TemperatureData[] = rainfallData
-		.filter(
-			(d) =>
-				d.temperature !== undefined &&
-				d.temperatureMin !== undefined &&
-				d.temperatureMax !== undefined
-		)
-		.map((d) => ({
-			date: d.date,
-			temperature: d.temperature!,
-			temperatureMin: d.temperatureMin!,
-			temperatureMax: d.temperatureMax!
-		}));
+		// Cache the result
+		cacheService.set(latitude, longitude, 'temperature_historical', temperatureData);
+		return temperatureData;
+	} catch (comprehensiveError) {
+		// Fallback to original method
+		console.warn(
+			'Comprehensive data fetch failed, falling back to temperature extraction:',
+			comprehensiveError
+		);
+		const rainfallData = await getHistoricalRainfall(latitude, longitude, startDate, endDate);
+		const temperatureData: TemperatureData[] = rainfallData
+			.filter(
+				(d) =>
+					d.temperature !== undefined &&
+					d.temperatureMin !== undefined &&
+					d.temperatureMax !== undefined
+			)
+			.map((d) => ({
+				date: d.date,
+				temperature: d.temperature!,
+				temperatureMin: d.temperatureMin!,
+				temperatureMax: d.temperatureMax!
+			}));
 
-	// Cache the result
-	cacheService.set(latitude, longitude, 'temperature_historical', temperatureData);
-
-	return temperatureData;
+		cacheService.set(latitude, longitude, 'temperature_historical', temperatureData);
+		return temperatureData;
+	}
 }
 
 /**
  * Get wind data for the last 10 years
+ * Now uses comprehensive data function to reduce API calls
  */
 export async function getTenYearWindData(latitude: number, longitude: number): Promise<WindData[]> {
 	// Check cache first
@@ -240,57 +412,77 @@ export async function getTenYearWindData(latitude: number, longitude: number): P
 	const startDate = new Date(currentYear - 10, 0, 1);
 	const endDate = new Date();
 
-	const start = format(startDate, 'yyyy-MM-dd');
-	const end = format(endDate, 'yyyy-MM-dd');
-
-	const url = new URL('https://archive-api.open-meteo.com/v1/archive');
-	url.searchParams.set('latitude', latitude.toString());
-	url.searchParams.set('longitude', longitude.toString());
-	url.searchParams.set('start_date', start);
-	url.searchParams.set('end_date', end);
-	url.searchParams.set(
-		'daily',
-		'wind_speed_10m_mean,wind_direction_10m_dominant,wind_gusts_10m_max'
-	);
-	url.searchParams.set('timezone', 'Europe/London');
-
+	// Use comprehensive data function
 	try {
-		console.log('Fetching wind data from:', url.toString());
-		const response = await fetch(url.toString());
-
-		if (!response.ok) {
-			const errorText = await response.text();
-			console.error('Wind API error:', response.status, errorText);
-			throw new Error(`Wind API error: ${response.status} - ${errorText}`);
-		}
-
-		const data: WeatherApiResponse = await response.json();
-
-		if (!data.daily || !data.daily.time) {
-			throw new Error('Invalid response format from wind API');
-		}
-
-		const windData: WindData[] = data.daily.time
-			.map((date, index) => ({
-				date,
-				windSpeed: data.daily.wind_speed_10m_mean?.[index] || 0,
-				windDirection: data.daily.wind_direction_10m_dominant?.[index] || 0,
-				windGusts: data.daily.wind_gusts_10m_max?.[index] || 0
-			}))
-			.filter((d) => d.windSpeed !== null && d.windDirection !== null && d.windGusts !== null);
+		const comprehensiveData = await getComprehensiveHistoricalData(
+			latitude,
+			longitude,
+			startDate,
+			endDate
+		);
+		const windData = comprehensiveData.wind;
 
 		// Cache the result
 		cacheService.set(latitude, longitude, 'wind_historical', windData);
-
 		return windData;
-	} catch (error) {
-		console.error('Wind API fetch error:', error);
-		throw new Error(`Failed to fetch wind data: ${error}`);
+	} catch (comprehensiveError) {
+		// Fallback to original separate API call method
+		console.warn(
+			'Comprehensive data fetch failed, falling back to wind-only API:',
+			comprehensiveError
+		);
+		const start = format(startDate, 'yyyy-MM-dd');
+		const end = format(endDate, 'yyyy-MM-dd');
+
+		const url = new URL('https://archive-api.open-meteo.com/v1/archive');
+		url.searchParams.set('latitude', latitude.toString());
+		url.searchParams.set('longitude', longitude.toString());
+		url.searchParams.set('start_date', start);
+		url.searchParams.set('end_date', end);
+		url.searchParams.set(
+			'daily',
+			'wind_speed_10m_mean,wind_direction_10m_dominant,wind_gusts_10m_max'
+		);
+		url.searchParams.set('timezone', 'Europe/London');
+
+		try {
+			console.log('Fetching wind data from:', url.toString());
+			const response = await fetch(url.toString());
+
+			if (!response.ok) {
+				const errorText = await response.text();
+				console.error('Wind API error:', response.status, errorText);
+				throw new Error(`Wind API error: ${response.status} - ${errorText}`);
+			}
+
+			const data: WeatherApiResponse = await response.json();
+
+			if (!data.daily || !data.daily.time) {
+				throw new Error('Invalid response format from wind API');
+			}
+
+			const windData: WindData[] = data.daily.time
+				.map((date, index) => ({
+					date,
+					windSpeed: data.daily.wind_speed_10m_mean?.[index] || 0,
+					windDirection: data.daily.wind_direction_10m_dominant?.[index] || 0,
+					windGusts: data.daily.wind_gusts_10m_max?.[index] || 0
+				}))
+				.filter((d) => d.windSpeed !== null && d.windDirection !== null && d.windGusts !== null);
+
+			// Cache the result
+			cacheService.set(latitude, longitude, 'wind_historical', windData);
+			return windData;
+		} catch (fetchError) {
+			console.error('Wind API fetch error:', fetchError);
+			throw new Error(`Failed to fetch wind data: ${fetchError}`);
+		}
 	}
 }
 
 /**
  * Get solar radiation data for the last 10 years
+ * Now uses comprehensive data function to reduce API calls
  */
 export async function getTenYearSolarData(
 	latitude: number,
@@ -306,49 +498,68 @@ export async function getTenYearSolarData(
 	const startDate = new Date(currentYear - 10, 0, 1);
 	const endDate = new Date();
 
-	const start = format(startDate, 'yyyy-MM-dd');
-	const end = format(endDate, 'yyyy-MM-dd');
-
-	const url = new URL('https://archive-api.open-meteo.com/v1/archive');
-	url.searchParams.set('latitude', latitude.toString());
-	url.searchParams.set('longitude', longitude.toString());
-	url.searchParams.set('start_date', start);
-	url.searchParams.set('end_date', end);
-	url.searchParams.set('daily', 'shortwave_radiation_sum,sunshine_duration');
-	url.searchParams.set('timezone', 'Europe/London');
-
+	// Use comprehensive data function
 	try {
-		console.log('Fetching solar data from:', url.toString());
-		const response = await fetch(url.toString());
-
-		if (!response.ok) {
-			const errorText = await response.text();
-			console.error('Solar API error:', response.status, errorText);
-			throw new Error(`Solar API error: ${response.status} - ${errorText}`);
-		}
-
-		const data: WeatherApiResponse = await response.json();
-
-		if (!data.daily || !data.daily.time) {
-			throw new Error('Invalid response format from solar API');
-		}
-
-		const solarData: SolarData[] = data.daily.time
-			.map((date, index) => ({
-				date,
-				solarRadiation: data.daily.shortwave_radiation_sum?.[index] || 0,
-				solarRadiationSum: data.daily.shortwave_radiation_sum?.[index] || 0,
-				uvIndex: undefined, // No UV Index data
-				sunshineDuration: data.daily.sunshine_duration?.[index]
-			}))
-			.filter((d) => d.solarRadiation !== null);
+		const comprehensiveData = await getComprehensiveHistoricalData(
+			latitude,
+			longitude,
+			startDate,
+			endDate
+		);
+		const solarData = comprehensiveData.solar;
 
 		// Cache the result
 		cacheService.set(latitude, longitude, 'solar_historical', solarData);
-
 		return solarData;
-	} catch (error) {
-		console.error('Solar API fetch error:', error);
-		throw new Error(`Failed to fetch solar data: ${error}`);
+	} catch (comprehensiveError) {
+		// Fallback to original separate API call method
+		console.warn(
+			'Comprehensive data fetch failed, falling back to solar-only API:',
+			comprehensiveError
+		);
+		const start = format(startDate, 'yyyy-MM-dd');
+		const end = format(endDate, 'yyyy-MM-dd');
+
+		const url = new URL('https://archive-api.open-meteo.com/v1/archive');
+		url.searchParams.set('latitude', latitude.toString());
+		url.searchParams.set('longitude', longitude.toString());
+		url.searchParams.set('start_date', start);
+		url.searchParams.set('end_date', end);
+		url.searchParams.set('daily', 'shortwave_radiation_sum,sunshine_duration');
+		url.searchParams.set('timezone', 'Europe/London');
+
+		try {
+			console.log('Fetching solar data from:', url.toString());
+			const response = await fetch(url.toString());
+
+			if (!response.ok) {
+				const errorText = await response.text();
+				console.error('Solar API error:', response.status, errorText);
+				throw new Error(`Solar API error: ${response.status} - ${errorText}`);
+			}
+
+			const data: WeatherApiResponse = await response.json();
+
+			if (!data.daily || !data.daily.time) {
+				throw new Error('Invalid response format from solar API');
+			}
+
+			const solarData: SolarData[] = data.daily.time
+				.map((date, index) => ({
+					date,
+					solarRadiation: data.daily.shortwave_radiation_sum?.[index] || 0,
+					solarRadiationSum: data.daily.shortwave_radiation_sum?.[index] || 0,
+					uvIndex: undefined, // No UV Index data
+					sunshineDuration: data.daily.sunshine_duration?.[index]
+				}))
+				.filter((d) => d.solarRadiation !== null);
+
+			// Cache the result
+			cacheService.set(latitude, longitude, 'solar_historical', solarData);
+			return solarData;
+		} catch (fetchError) {
+			console.error('Solar API fetch error:', fetchError);
+			throw new Error(`Failed to fetch solar data: ${fetchError}`);
+		}
 	}
 }

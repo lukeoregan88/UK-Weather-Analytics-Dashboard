@@ -84,10 +84,16 @@
 	let currentWeather: any = null;
 	let showMonthlyComparison = false;
 	let selectedMonth = new Date().getMonth();
-	let cacheStats: { totalEntries: number; totalSize: number; oldestEntry: Date | null } = {
+	let cacheStats: {
+		totalEntries: number;
+		totalSize: number;
+		oldestEntry: Date | null;
+		typeBreakdown: Record<string, number>;
+	} = {
 		totalEntries: 0,
 		totalSize: 0,
-		oldestEntry: null
+		oldestEntry: null,
+		typeBreakdown: {}
 	};
 	let showCacheInfo = false;
 
@@ -253,6 +259,11 @@
 
 	function clearAllExpiredCache() {
 		cacheService.clearExpired();
+		updateCacheStats();
+	}
+
+	function clearAllCache() {
+		cacheService.clearAll();
 		updateCacheStats();
 	}
 
@@ -441,6 +452,12 @@
 						>
 							Clear expired
 						</button>
+						<button
+							on:click={clearAllCache}
+							class="rounded-md bg-orange-100 px-2 py-1 text-xs text-orange-700 hover:bg-orange-200 focus:outline-none"
+						>
+							Clear all cache
+						</button>
 						{#if location}
 							<button
 								on:click={clearCache}
@@ -469,9 +486,24 @@
 							{cacheStats.oldestEntry ? cacheStats.oldestEntry.toLocaleDateString() : 'None'}
 						</div>
 					</div>
+
+					{#if Object.keys(cacheStats.typeBreakdown).length > 0}
+						<div class="mt-2 border-t border-gray-200 pt-2">
+							<div class="mb-1 text-xs font-medium text-gray-700">Cache breakdown:</div>
+							<div class="grid grid-cols-2 gap-1 text-xs text-gray-600 sm:grid-cols-4">
+								{#each Object.entries(cacheStats.typeBreakdown) as [type, count]}
+									<div>
+										<span class="font-medium">{type}:</span>
+										{count}
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
 					<p class="mt-1 text-xs text-gray-500">
-						Data is cached for 12 hours (historical), 6 hours (current year), and 1 hour (current
-						weather) to reduce API calls.
+						Data is cached for 24 hours (historical), 6 hours (current year), and 1 hour (current
+						weather) to reduce API calls. Comprehensive data fetching reduces redundant requests.
 					</p>
 				</div>
 			{/if}
