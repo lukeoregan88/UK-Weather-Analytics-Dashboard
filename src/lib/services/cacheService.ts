@@ -16,7 +16,8 @@ export type CacheType =
 	| 'temperature_historical'
 	| 'wind_historical'
 	| 'solar_historical'
-	| 'historical_raw'; // For raw API responses with date ranges
+	| 'historical_raw' // For raw API responses with date ranges
+	| 'weather_news'; // For weather news articles
 
 class CacheService {
 	private readonly defaultTTL = 12 * 60 * 60 * 1000; // 12 hours in milliseconds
@@ -29,7 +30,8 @@ class CacheService {
 		temperature_historical: 24 * 60 * 60 * 1000, // 24 hours for historical temperature
 		wind_historical: 24 * 60 * 60 * 1000, // 24 hours for historical wind
 		solar_historical: 24 * 60 * 60 * 1000, // 24 hours for historical solar
-		historical_raw: 24 * 60 * 60 * 1000 // 24 hours for raw API responses
+		historical_raw: 24 * 60 * 60 * 1000, // 24 hours for raw API responses
+		weather_news: 30 * 60 * 1000 // 30 minutes for weather news
 	};
 
 	/**
@@ -204,6 +206,22 @@ class CacheService {
 	}
 
 	/**
+	 * Remove specific cache entry
+	 */
+	remove(lat: number, lng: number, type: CacheType): void {
+		try {
+			const key = this.generateKey(lat, lng, type);
+			const existed = localStorage.getItem(key) !== null;
+			localStorage.removeItem(key);
+			if (existed) {
+				console.log(`Removed cached ${type} data for ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+			}
+		} catch (error) {
+			console.warn('Failed to remove cached data:', error);
+		}
+	}
+
+	/**
 	 * Clear all cached data for a location
 	 */
 	clearLocation(lat: number, lng: number): void {
@@ -215,7 +233,8 @@ class CacheService {
 				'temperature_historical',
 				'wind_historical',
 				'solar_historical',
-				'historical_raw'
+				'historical_raw',
+				'weather_news'
 			];
 
 			let removedCount = 0;

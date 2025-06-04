@@ -1409,16 +1409,22 @@ export function calculateSolarEnergyInsights(
 ): SolarEnergyInsights {
 	if (solarData.length === 0) {
 		return {
-			dailyEnergyPotential: 0,
-			monthlyEnergyPotential: 0,
-			yearlyEnergyPotential: 0,
 			optimalTiltAngle: 0,
-			seasonalVariation: {
+			seasonalEfficiency: {
 				spring: 0,
 				summer: 0,
 				autumn: 0,
 				winter: 0
-			}
+			},
+			monthlyEnergyPotential: Array.from({ length: 12 }, (_, i) => ({
+				month: format(new Date(2000, i, 1), 'MMMM'),
+				potential: 0
+			})),
+			yearlyEnergyPotential: 0,
+			peakSolarHours: 0,
+			solarEfficiencyRating: 'Poor',
+			recommendedSystemSize: 0,
+			estimatedAnnualSavings: 0
 		};
 	}
 
@@ -1432,13 +1438,27 @@ export function calculateSolarEnergyInsights(
 		(solarData.reduce((sum, d) => sum + d.solarRadiation, 0) / solarData.length) * 0.278;
 
 	const dailyEnergyPotential = avgDailySolarKwh * panelEfficiency * systemEfficiency * panelArea;
-	const monthlyEnergyPotential = dailyEnergyPotential * 30;
 	const yearlyEnergyPotential = dailyEnergyPotential * 365;
 
 	// Optimal tilt angle approximation (latitude - 15° to latitude + 15° range, optimal around latitude)
 	const optimalTiltAngle = Math.round(latitude);
 
-	// Calculate seasonal variations
+	// Calculate monthly energy potential
+	const monthlyEnergyPotential = Array.from({ length: 12 }, (_, monthIndex) => {
+		const monthData = solarData.filter((d) => getMonth(parseISO(d.date)) === monthIndex);
+		const monthlyAvgRadiation =
+			monthData.length > 0
+				? monthData.reduce((sum, d) => sum + d.solarRadiation, 0) / monthData.length
+				: 0;
+		const monthlyPotential = monthlyAvgRadiation * 0.278 * panelEfficiency * systemEfficiency;
+
+		return {
+			month: format(new Date(2000, monthIndex, 1), 'MMMM'),
+			potential: Math.round(monthlyPotential * 100) / 100
+		};
+	});
+
+	// Calculate seasonal efficiency
 	const seasonalData = {
 		spring: solarData.filter((d) => {
 			const month = getMonth(parseISO(d.date));
@@ -1458,7 +1478,7 @@ export function calculateSolarEnergyInsights(
 		})
 	};
 
-	const seasonalVariation = {
+	const seasonalEfficiency = {
 		spring:
 			seasonalData.spring.length > 0
 				? (seasonalData.spring.reduce((sum, d) => sum + d.solarRadiation, 0) /
@@ -1493,17 +1513,34 @@ export function calculateSolarEnergyInsights(
 				: 0
 	};
 
+	// Calculate additional properties to match SolarEnergyInsights interface
+	const peakSolarHours = avgDailySolarKwh / 1000; // Approximate peak sun hours
+	const solarEfficiencyRating: 'Poor' | 'Fair' | 'Good' | 'Excellent' =
+		avgDailySolarKwh < 2
+			? 'Poor'
+			: avgDailySolarKwh < 4
+				? 'Fair'
+				: avgDailySolarKwh < 6
+					? 'Good'
+					: 'Excellent';
+
+	const recommendedSystemSize = Math.round((yearlyEnergyPotential / 1000) * 4); // kW
+	const estimatedAnnualSavings = Math.round(yearlyEnergyPotential * 0.15); // £ at ~15p/kWh
+
 	return {
-		dailyEnergyPotential: Math.round(dailyEnergyPotential * 100) / 100,
-		monthlyEnergyPotential: Math.round(monthlyEnergyPotential * 100) / 100,
-		yearlyEnergyPotential: Math.round(yearlyEnergyPotential * 100) / 100,
 		optimalTiltAngle,
-		seasonalVariation: {
-			spring: Math.round(seasonalVariation.spring * 100) / 100,
-			summer: Math.round(seasonalVariation.summer * 100) / 100,
-			autumn: Math.round(seasonalVariation.autumn * 100) / 100,
-			winter: Math.round(seasonalVariation.winter * 100) / 100
-		}
+		seasonalEfficiency: {
+			spring: Math.round(seasonalEfficiency.spring * 100) / 100,
+			summer: Math.round(seasonalEfficiency.summer * 100) / 100,
+			autumn: Math.round(seasonalEfficiency.autumn * 100) / 100,
+			winter: Math.round(seasonalEfficiency.winter * 100) / 100
+		},
+		monthlyEnergyPotential,
+		yearlyEnergyPotential: Math.round(yearlyEnergyPotential * 100) / 100,
+		peakSolarHours: Math.round(peakSolarHours * 10) / 10,
+		solarEfficiencyRating,
+		recommendedSystemSize,
+		estimatedAnnualSavings
 	};
 }
 

@@ -12,6 +12,7 @@
 	import WeatherExtremesPanel from './panels/WeatherExtremesPanel.svelte';
 	import CurrentWeatherPanel from './panels/CurrentWeatherPanel.svelte';
 	import KeyStatisticsPanel from './panels/KeyStatisticsPanel.svelte';
+	import WeatherNewsPanel from './panels/WeatherNewsPanel.svelte';
 	import type {
 		Location,
 		RainfallData,
@@ -1159,6 +1160,9 @@
 			<EnhancedStatisticsPanel {enhancedStats} {loadingData} />
 		{/if}
 	</div>
+
+	<!-- Weather News Panel - Always visible -->
+	<WeatherNewsPanel />
 
 	<!-- Data Sources Footnote -->
 	<FootNote />

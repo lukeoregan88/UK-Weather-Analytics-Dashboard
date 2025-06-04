@@ -32,6 +32,27 @@
 					- Free UK postcode lookup API
 				</p>
 				<p>
+					<strong>Weather News:</strong> Latest UK weather news provided by
+					<a
+						href="https://www.theguardian.com/uk/weather"
+						target="_blank"
+						rel="noopener noreferrer"
+						class="text-blue-600 underline hover:text-blue-800"
+					>
+						The Guardian Weather RSS feed
+					</a>
+					via
+					<a
+						href="https://rss2json.com/"
+						target="_blank"
+						rel="noopener noreferrer"
+						class="text-blue-600 underline hover:text-blue-800"
+					>
+						RSS2JSON API
+					</a>
+					- Cached for 30 minutes
+				</p>
+				<p>
 					<strong>Data Coverage:</strong> Rainfall and temperature data spans up to 10 years of historical
 					records. Current weather conditions are updated hourly. All data is cached locally to minimise
 					API requests.

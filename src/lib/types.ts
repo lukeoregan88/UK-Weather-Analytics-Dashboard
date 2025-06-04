@@ -287,16 +287,22 @@ export interface SolarExtremes {
 
 // Solar energy calculations
 export interface SolarEnergyInsights {
-	dailyEnergyPotential: number; // kWh potential per day (assuming standard solar panel efficiency)
-	monthlyEnergyPotential: number; // kWh potential per month
-	yearlyEnergyPotential: number; // kWh potential per year
-	optimalTiltAngle: number; // optimal solar panel tilt angle for this location
-	seasonalVariation: {
+	optimalTiltAngle: number;
+	seasonalEfficiency: {
 		spring: number;
 		summer: number;
 		autumn: number;
 		winter: number;
-	}; // seasonal energy potential variation
+	};
+	monthlyEnergyPotential: Array<{
+		month: string;
+		potential: number; // kWh/m²
+	}>;
+	yearlyEnergyPotential: number; // kWh/m²/year
+	peakSolarHours: number;
+	solarEfficiencyRating: 'Poor' | 'Fair' | 'Good' | 'Excellent';
+	recommendedSystemSize: number; // kW for average home
+	estimatedAnnualSavings: number; // £
 }
 
 // Growing insights for agriculture/gardening
@@ -321,4 +327,31 @@ export interface SeasonalSolarStat {
 	peakSolarDays: number;
 	avgUvIndex: number;
 	energyPotential: number; // kWh potential for the season
+}
+
+// News/RSS feed types
+export interface NewsArticle {
+	title: string;
+	description: string;
+	link: string;
+	pubDate: string;
+	category?: string;
+	author?: string;
+}
+
+export interface RssResponse {
+	status: string;
+	feed: {
+		title: string;
+		description: string;
+		link: string;
+		image: string;
+	};
+	items: NewsArticle[];
+}
+
+export interface NewsData {
+	articles: NewsArticle[];
+	lastUpdated: Date;
+	source: string;
 }

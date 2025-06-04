@@ -80,9 +80,9 @@
 		<div class="rounded-lg bg-white p-4 shadow-sm">
 			<h3 class="text-xs font-medium tracking-wide text-gray-500 uppercase">Energy Potential</h3>
 			<p class="mt-1 text-2xl font-bold text-gray-900">
-				{solarEnergyInsights?.dailyEnergyPotential.toFixed(2) || '0'} kWh
+				{solarEnergyInsights?.peakSolarHours?.toFixed(2) || '0.0'} kWh
 			</p>
-			<p class="text-xs text-gray-600">Per m² per day</p>
+			<p class="text-xs text-gray-600">Peak solar hours</p>
 		</div>
 
 		<div class="rounded-lg bg-white p-4 shadow-sm">
