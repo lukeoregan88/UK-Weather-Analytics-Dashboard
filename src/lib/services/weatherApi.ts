@@ -126,7 +126,7 @@ export async function getLocationFromPostcode(postcode: string): Promise<Locatio
 	const cleanPostcode = postcode.replace(/\s+/g, '').toUpperCase();
 
 	try {
-		console.log('Looking up postcode:', cleanPostcode);
+		//console.log('Looking up postcode:', cleanPostcode);
 		const response = await fetch(`https://api.postcodes.io/postcodes/${cleanPostcode}`);
 
 		if (!response.ok) {
@@ -136,7 +136,7 @@ export async function getLocationFromPostcode(postcode: string): Promise<Locatio
 		}
 
 		const data: PostcodeApiResponse = await response.json();
-		console.log('Postcode lookup successful:', data.result);
+		//console.log('Postcode lookup successful:', data.result);
 
 		return {
 			postcode: data.result.postcode,

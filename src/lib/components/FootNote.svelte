@@ -1,4 +1,4 @@
-<div class="mt-8 border-t border-gray-200 bg-gray-200 pt-6">
+<div class="mt-8 border-t border-gray-200 bg-gray-200 pt-6 pb-12">
 	<div class="mx-auto max-w-7xl px-4">
 		<div class="rounded-lg bg-gray-200 p-4">
 			<h4 class="mb-2 text-sm font-semibold text-gray-700">Data Sources</h4>
@@ -53,7 +53,6 @@
 							minute: '2-digit'
 						})}</em
 					>
-					-
 				</p>
 				<h4 class="mt-4 mb-2 text-sm font-semibold text-gray-700">Support My Project</h4>
 				<p class="text-xs text-gray-600">

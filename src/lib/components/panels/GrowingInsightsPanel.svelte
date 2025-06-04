@@ -15,13 +15,14 @@
 			<div>
 				<h3 class="text-lg font-semibold text-gray-900">Growing Season Insights</h3>
 				<p class="text-xs text-gray-600">Agricultural and gardening recommendations</p>
+				<p class="mt-1 text-xs text-gray-500">Based on 10 years of historical weather data</p>
 			</div>
 		</div>
 
 		<div class="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
 			<!-- Growing Season Overview -->
 			<div class="rounded-lg border border-green-200 bg-green-50 p-4">
-				<h4 class="text-md mb-3 font-medium text-green-900">Growing Season</h4>
+				<h4 class="text-md mb-3 font-medium text-green-900">Predicted Growing Season</h4>
 				<div class="space-y-2">
 					<div class="flex justify-between">
 						<span class="text-sm text-green-700">Start:</span>
@@ -46,7 +47,7 @@
 						</span>
 					</div>
 					<div class="flex justify-between">
-						<span class="text-sm text-green-700">Frost-free days:</span>
+						<span class="text-sm text-green-700">Frost-free days (current year):</span>
 						<span class="text-sm font-medium text-green-800">
 							{growingInsights.frostFreeDays}
 						</span>
@@ -74,7 +75,7 @@
 						</span>
 					</div>
 					<div class="flex justify-between">
-						<span class="text-sm text-yellow-700">Growing degree days:</span>
+						<span class="text-sm text-yellow-700">Growing degree days (current year):</span>
 						<span class="text-sm font-medium text-yellow-800">
 							{growingInsights.growingDegreeDays}
 						</span>

@@ -1530,20 +1530,54 @@ export function calculateGrowingInsights(
 
 	// Calculate Growing Degree Days (base 10°C)
 	const baseTemp = 10;
-	const growingDegreeDays = temperatureData.reduce((sum, day) => {
-		const avgTemp = day.temperature;
-		return sum + Math.max(0, avgTemp - baseTemp);
-	}, 0);
-
-	// Calculate frost-free days
-	const frostFreeDays = temperatureData.filter((day) => day.temperatureMin > 0).length;
-
-	// Estimate growing season (last spring frost to first autumn frost)
 	const currentYear = new Date().getFullYear();
 	const currentYearTempData = temperatureData.filter(
 		(d) => getYear(parseISO(d.date)) === currentYear
 	);
 
+	let growingDegreeDays: number;
+	let frostFreeDays: number;
+
+	if (currentYearTempData.length > 0) {
+		// Use current year data if available
+		growingDegreeDays = currentYearTempData.reduce((sum, day) => {
+			const avgTemp = day.temperature;
+			return sum + Math.max(0, avgTemp - baseTemp);
+		}, 0);
+		frostFreeDays = currentYearTempData.filter((day) => day.temperatureMin > 0).length;
+	} else {
+		// Calculate average per year from historical data
+		const yearlyGroups = temperatureData.reduce(
+			(acc, item) => {
+				const year = getYear(parseISO(item.date));
+				if (!acc[year]) acc[year] = [];
+				acc[year].push(item);
+				return acc;
+			},
+			{} as Record<number, TemperatureData[]>
+		);
+
+		const yearlyGrowingDegreeDays = Object.values(yearlyGroups).map((yearData) =>
+			yearData.reduce((sum, day) => {
+				const avgTemp = day.temperature;
+				return sum + Math.max(0, avgTemp - baseTemp);
+			}, 0)
+		);
+
+		const yearlyFrostFreeDays = Object.values(yearlyGroups).map(
+			(yearData) => yearData.filter((day) => day.temperatureMin > 0).length
+		);
+
+		growingDegreeDays = Math.round(
+			yearlyGrowingDegreeDays.reduce((sum, days) => sum + days, 0) / yearlyGrowingDegreeDays.length
+		);
+
+		frostFreeDays = Math.round(
+			yearlyFrostFreeDays.reduce((sum, days) => sum + days, 0) / yearlyFrostFreeDays.length
+		);
+	}
+
+	// Estimate growing season (last spring frost to first autumn frost)
 	let growingSeasonStart = '';
 	let growingSeasonEnd = '';
 	let duration = 0;

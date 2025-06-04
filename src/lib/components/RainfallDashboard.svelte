@@ -403,9 +403,9 @@
 </script>
 
 <div class="min-h-screen bg-gray-50">
-	<div class="mx-auto max-w-7xl">
+	<div class="mx-auto max-w-7xl pt-4">
 		<!-- Header -->
-		<div class="mt-4 mb-4 rounded-lg bg-white p-4 shadow-sm">
+		<div class="mb-4 rounded-lg bg-white p-4 shadow-sm">
 			<h1 class="mb-2 text-2xl font-bold text-gray-900">UK Weather Analytics Dashboard</h1>
 			<p class="mb-4 text-sm text-gray-600">
 				Comprehensive weather analysis including rainfall, temperature, wind, and solar data for any
