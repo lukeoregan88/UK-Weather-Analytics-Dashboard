@@ -13,6 +13,7 @@
 	import CurrentWeatherPanel from './panels/CurrentWeatherPanel.svelte';
 	import KeyStatisticsPanel from './panels/KeyStatisticsPanel.svelte';
 	import WeatherNewsPanel from './panels/WeatherNewsPanel.svelte';
+	import WeatherWarningsCarousel from './WeatherWarningsCarousel.svelte';
 	import type {
 		Location,
 		RainfallData,
@@ -30,7 +31,9 @@
 		SolarExtremes,
 		SolarEnergyInsights,
 		GrowingInsights,
-		EnhancedStatistics
+		EnhancedStatistics,
+		WeatherWarning,
+		WeatherWarningsData
 	} from '../types.js';
 	import {
 		getLocationFromPostcode,
@@ -42,6 +45,7 @@
 		getTenYearSolarData,
 		getRateLimiterStats
 	} from '../services/weatherApi.js';
+	import { weatherWarningsService } from '../services/weatherWarningsService.js';
 	import {
 		calculateYearlyComparison,
 		calculateMonthlyComparison,
@@ -104,6 +108,10 @@
 	};
 	let showCacheInfo = false;
 
+	// Weather warnings data
+	let weatherWarnings: WeatherWarning[] = [];
+	let loadingWarnings = false;
+
 	// Temperature data
 	let temperatureData: TemperatureData[] = [];
 	let recentTemperatureData: TemperatureData[] = [];
@@ -143,6 +151,22 @@
 	let showSolarView = false;
 	let enhancedStats: EnhancedStatistics | null = null;
 
+	async function loadWeatherWarnings() {
+		loadingWarnings = true;
+		console.log('Starting to load weather warnings...');
+		try {
+			const warningsData = await weatherWarningsService.getWeatherWarnings();
+			console.log('Received warnings data:', warningsData);
+			weatherWarnings = warningsData.warnings;
+			console.log('Set weatherWarnings array:', weatherWarnings.length, 'warnings');
+		} catch (err) {
+			console.warn('Failed to load weather warnings:', err);
+			weatherWarnings = [];
+		} finally {
+			loadingWarnings = false;
+		}
+	}
+
 	async function searchLocation() {
 		if (!postcode.trim()) {
 			error = 'Please enter a postcode';
@@ -161,12 +185,16 @@
 		solarData = [];
 		currentWeather = null;
 		enhancedStats = null;
+		// Don't reset weatherWarnings as they're UK-wide, not location-specific
 
 		try {
 			location = await getLocationFromPostcode(postcode);
 			// Save postcode for next visit
 			postcodeStorage.save(postcode);
+
+			// Load weather data (warnings are loaded once on mount and don't need location)
 			await loadWeatherData();
+
 			updateCacheStats();
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to fetch data';
@@ -286,6 +314,26 @@
 		}
 		updateCacheStats();
 		updateRateLimiterStats();
+
+		// Clear weather warnings cache to ensure fresh data with new unique IDs
+		try {
+			cacheService.remove(0, 0, 'weather_warnings');
+			// Also clear any old localStorage cache
+			if (typeof localStorage !== 'undefined') {
+				const keys = Object.keys(localStorage);
+				keys.forEach((key) => {
+					if (key.includes('weather_warnings') || key.includes('warnings')) {
+						localStorage.removeItem(key);
+					}
+				});
+			}
+		} catch (e) {
+			// Ignore cache clear errors
+			console.log('Cache clear completed');
+		}
+
+		// Load weather warnings immediately on mount
+		loadWeatherWarnings();
 
 		// Update rate limiter stats every 5 seconds
 		const interval = setInterval(() => {
@@ -1160,6 +1208,9 @@
 			<EnhancedStatisticsPanel {enhancedStats} {loadingData} />
 		{/if}
 	</div>
+
+	<!-- Weather Warnings Carousel - Always visible for all UK locations -->
+	<WeatherWarningsCarousel warnings={weatherWarnings} />
 
 	<!-- Weather News Panel - Always visible -->
 	<WeatherNewsPanel />

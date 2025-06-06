@@ -355,3 +355,23 @@ export interface NewsData {
 	lastUpdated: Date;
 	source: string;
 }
+
+// Weather Warning types
+export interface WeatherWarning {
+	id: string;
+	title: string;
+	description: string;
+	regions: string[];
+	severity: 'Yellow' | 'Amber' | 'Red';
+	type: 'rain' | 'snow' | 'wind' | 'thunderstorm' | 'ice' | 'fog' | 'heat' | 'cold';
+	validFrom: Date;
+	validTo: Date;
+	link: string;
+	issued: Date;
+}
+
+export interface WeatherWarningsData {
+	warnings: WeatherWarning[];
+	lastUpdated: Date;
+	source: string;
+}

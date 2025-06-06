@@ -17,7 +17,8 @@ export type CacheType =
 	| 'wind_historical'
 	| 'solar_historical'
 	| 'historical_raw' // For raw API responses with date ranges
-	| 'weather_news'; // For weather news articles
+	| 'weather_news' // For weather news articles
+	| 'weather_warnings'; // For weather warnings from Met Office
 
 class CacheService {
 	private readonly defaultTTL = 12 * 60 * 60 * 1000; // 12 hours in milliseconds
@@ -31,7 +32,8 @@ class CacheService {
 		wind_historical: 24 * 60 * 60 * 1000, // 24 hours for historical wind
 		solar_historical: 24 * 60 * 60 * 1000, // 24 hours for historical solar
 		historical_raw: 24 * 60 * 60 * 1000, // 24 hours for raw API responses
-		weather_news: 30 * 60 * 1000 // 30 minutes for weather news
+		weather_news: 30 * 60 * 1000, // 30 minutes for weather news
+		weather_warnings: 10 * 60 * 1000 // 10 minutes for weather warnings
 	};
 
 	/**
