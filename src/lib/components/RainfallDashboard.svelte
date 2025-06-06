@@ -153,14 +153,10 @@
 
 	async function loadWeatherWarnings() {
 		loadingWarnings = true;
-		console.log('Starting to load weather warnings...');
 		try {
 			const warningsData = await weatherWarningsService.getWeatherWarnings();
-			console.log('Received warnings data:', warningsData);
 			weatherWarnings = warningsData.warnings;
-			console.log('Set weatherWarnings array:', weatherWarnings.length, 'warnings');
 		} catch (err) {
-			console.warn('Failed to load weather warnings:', err);
 			weatherWarnings = [];
 		} finally {
 			loadingWarnings = false;

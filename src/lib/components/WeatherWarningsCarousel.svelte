@@ -16,9 +16,6 @@
 		carouselInterval = setInterval(() => {
 			if (!isPaused) {
 				const nextIndex = (currentIndex + 1) % warnings.length;
-				console.log(
-					`Carousel advancing from ${currentIndex} to ${nextIndex} (total: ${warnings.length})`
-				);
 				currentIndex = nextIndex;
 			}
 		}, 10000);
@@ -145,7 +142,6 @@
 	// Watch for warnings changes and restart carousel if needed
 	$: {
 		if (warnings !== previousWarnings) {
-			console.log('WeatherWarningsCarousel warnings array changed:', warnings.length);
 			previousWarnings = warnings;
 
 			// Reset to first slide when warnings change

@@ -55,7 +55,6 @@ class RateLimiter {
 			if (elapsedTime >= 60000) {
 				this.currentCalls = 0;
 				this.startTime = now;
-				console.log('Rate limiter: Reset call count for new minute');
 			}
 
 			// If we are under the limit, process the next request
@@ -63,9 +62,6 @@ class RateLimiter {
 				const requestFunction = this.queue.shift();
 				if (requestFunction) {
 					this.currentCalls++;
-					console.log(
-						`Rate limiter: Processing request ${this.currentCalls}/${this.minutelyLimit}`
-					);
 					await requestFunction();
 
 					// Small delay between requests to spread them out
@@ -76,9 +72,6 @@ class RateLimiter {
 			} else {
 				// If limit reached, wait until the next minute
 				const waitTime = 60000 - elapsedTime;
-				console.log(
-					`Rate limiter: Limit reached, waiting ${Math.round(waitTime / 1000)}s until next minute`
-				);
 				await this.delay(waitTime);
 			}
 		}
@@ -126,7 +119,6 @@ export async function getLocationFromPostcode(postcode: string): Promise<Locatio
 	const cleanPostcode = postcode.replace(/\s+/g, '').toUpperCase();
 
 	try {
-		//console.log('Looking up postcode:', cleanPostcode);
 		const response = await fetch(`https://api.postcodes.io/postcodes/${cleanPostcode}`);
 
 		if (!response.ok) {
@@ -136,7 +128,6 @@ export async function getLocationFromPostcode(postcode: string): Promise<Locatio
 		}
 
 		const data: PostcodeApiResponse = await response.json();
-		//console.log('Postcode lookup successful:', data.result);
 
 		return {
 			postcode: data.result.postcode,
@@ -190,12 +181,10 @@ export async function getHistoricalRainfall(
 	// Use rate limiter for the API call
 	return rateLimiter.add(async () => {
 		try {
-			console.log('Fetching weather data from:', url.toString());
 			const response = await fetch(url.toString());
 
 			if (!response.ok) {
 				const errorText = await response.text();
-				console.error('Weather API error:', response.status, errorText);
 				throw new Error(`Weather API error: ${response.status} - ${errorText}`);
 			}
 
@@ -278,7 +267,6 @@ export async function getComprehensiveHistoricalData(
 	// Use rate limiter for the API call
 	return rateLimiter.add(async () => {
 		try {
-			console.log('Fetching comprehensive weather data from:', url.toString());
 			const response = await fetch(url.toString());
 
 			if (!response.ok) {
@@ -572,7 +560,6 @@ export async function getTenYearWindData(latitude: number, longitude: number): P
 		// Use rate limiter for fallback API call
 		return rateLimiter.add(async () => {
 			try {
-				console.log('Fetching wind data from:', url.toString());
 				const response = await fetch(url.toString());
 
 				if (!response.ok) {
@@ -658,7 +645,6 @@ export async function getTenYearSolarData(
 		// Use rate limiter for fallback API call
 		return rateLimiter.add(async () => {
 			try {
-				console.log('Fetching solar data from:', url.toString());
 				const response = await fetch(url.toString());
 
 				if (!response.ok) {

@@ -80,7 +80,6 @@ class WeatherWarningsService {
 		// Check cache first (cache for 10 minutes)
 		const cached = cacheService.get<WeatherWarningsData>(0, 0, this.CACHE_TYPE);
 		if (cached) {
-			console.log('Returning cached weather warnings');
 			// Ensure lastUpdated is a Date object (it gets serialized as string in localStorage)
 			return {
 				...cached,
@@ -92,8 +91,6 @@ class WeatherWarningsService {
 			try {
 				const url = new URL(RSS2JSON_API);
 				url.searchParams.set('rss_url', RSS_FEED_URL);
-
-				console.log('Fetching weather warnings from RSS2JSON:', url.toString());
 
 				const response = await fetch(url.toString());
 
@@ -107,15 +104,11 @@ class WeatherWarningsService {
 					throw new Error('RSS2JSON API returned error status');
 				}
 
-				console.log('Received weather warnings data:', data.items.length, 'items');
-
 				// Process and clean the warnings
 				const warnings: WeatherWarning[] = data.items
 					.filter((item: RSS2JSONItem) => item.title && item.link)
 					.map((item: RSS2JSONItem, index: number) => this.parseWarningItem(item, index))
 					.filter((warning: WeatherWarning | null) => warning !== null) as WeatherWarning[];
-
-				console.log('Processed weather warnings:', warnings.length, 'valid warnings');
 
 				const warningsData: WeatherWarningsData = {
 					warnings,
@@ -148,8 +141,6 @@ class WeatherWarningsService {
 	 */
 	private parseWarningItem(item: RSS2JSONItem, index: number): WeatherWarning | null {
 		try {
-			console.log(`Parsing warning item ${index}:`, item.title);
-
 			const title = item.title?.trim() || '';
 			const description = item.description?.trim() || '';
 			const content = item.content?.trim() || description;
@@ -187,15 +178,6 @@ class WeatherWarningsService {
 				issued
 			};
 
-			console.log(`Successfully parsed warning:`, {
-				id,
-				title,
-				severity,
-				type,
-				regionsCount: regions.length,
-				validFrom,
-				validTo
-			});
 			return warning;
 		} catch (error) {
 			console.warn('Error parsing warning item:', error, item);
@@ -293,7 +275,6 @@ class WeatherWarningsService {
 			}
 		}
 
-		console.log('Extracted regions:', regions, 'from description:', description);
 		return regions;
 	}
 
@@ -348,17 +329,6 @@ class WeatherWarningsService {
 						}
 					}
 				}
-
-				console.log('Parsed dates:', {
-					fromTime,
-					fromDay,
-					fromMonth,
-					toTime,
-					toDay,
-					toMonth,
-					validFrom,
-					validTo
-				});
 			} catch (error) {
 				console.warn('Error parsing dates from description:', error);
 			}
@@ -422,7 +392,6 @@ class WeatherWarningsService {
 			finalId = `${titleHash}-${index}`;
 		}
 
-		console.log(`Generated ID for warning ${index}: "${finalId}" from title: "${title}"`);
 		return finalId;
 	}
 

@@ -43,7 +43,6 @@ export async function getWeatherNews(): Promise<NewsData> {
 	// Check cache first (cache for 30 minutes)
 	const cached = cacheService.get<NewsData>(0, 0, 'weather_news');
 	if (cached) {
-		console.log('Returning cached weather news');
 		// Ensure lastUpdated is a Date object (it gets serialized as string in localStorage)
 		return {
 			...cached,
@@ -57,8 +56,6 @@ export async function getWeatherNews(): Promise<NewsData> {
 			url.searchParams.set('rss_url', RSS_FEED_URL);
 			url.searchParams.set('api_key', ''); // Optional: add API key for higher limits
 			url.searchParams.set('count', '10'); // Limit to 10 articles
-
-			console.log('Fetching weather news from:', url.toString());
 
 			const response = await fetch(url.toString());
 
