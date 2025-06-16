@@ -26,3 +26,4 @@ vite.config.ts.timestamp-*
 # IDE
 .vscode
 .mdc
+.cursor
