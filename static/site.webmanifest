@@ -1,7 +1,7 @@
 {
-	"name": "UK Rainfall Analysis Dashboard",
-	"short_name": "UK Rainfall",
-	"description": "Comprehensive UK rainfall analysis dashboard featuring historical weather patterns and current conditions",
+	"name": "UK Weather Analytics Dashboard",
+	"short_name": "UK Weather Analytics",
+	"description": "Comprehensive UK weather analytics dashboard featuring historical weather patterns and current conditions",
 	"start_url": "/",
 	"display": "standalone",
 	"background_color": "#ffffff",
